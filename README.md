@@ -39,9 +39,23 @@ flowchart BT
     Bindings <-->|Typed arguments and results| Tools
 ```
 
+## Installation
+
+In Xcode, choose **File → Add Package Dependencies…** and enter `https://github.com/julianschiavo/REPLico.git`. Select **Up to Next Major Version** from `0.0.1`, then add **ReplicoKit** to your app target.
+
+In a Swift package, add these entries to `Package.swift`.
+
+```swift
+// In the package's dependencies array
+.package(url: "https://github.com/julianschiavo/REPLico.git", from: "0.0.1")
+
+// In your app target's dependencies array
+.product(name: "ReplicoKit", package: "replico")
+```
+
 ## Create a server
 
-Add the `ReplicoKit` product to a Swift executable target named `text-server`, then define its tools and entry point.
+This example defines a tool and its entry point in an executable target named `text-server`.
 
 ```swift
 import ReplicoKit
@@ -93,6 +107,6 @@ JavaScript variables persist between calls. `js_reset` starts a fresh session an
 
 See [Math](Examples/Math) for a small server and [MathComplex](Examples/MathComplex) for an existing app that chooses when to serve MCP.
 
-Requires Swift 6.4 and macOS 26 or later. See [architecture](Documentation/Architecture.md) for embedding and external Node configuration, [compatibility](Documentation/Compatibility.md) for JavaScript behavior, and [releasing](Documentation/Releasing.md) for package maintenance.
+Requires Swift 6.4 or later. The bundled runtime supports macOS 26 or later on Apple silicon and Linux on arm64 and x64. See [architecture](Documentation/Architecture.md) for embedding and external Node configuration, [compatibility](Documentation/Compatibility.md) for JavaScript behavior, and [releasing](Documentation/Releasing.md) for package maintenance.
 
 REPLico is available under the [MIT license](LICENSE).
