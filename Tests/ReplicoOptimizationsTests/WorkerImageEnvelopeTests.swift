@@ -27,7 +27,7 @@ struct WorkerImageEnvelopeTests {
     }
 
     @Test
-    func everyRawByteAndTwoByteCombinationCannotBypassNativeJSONDecoding() throws {
+    func everyRawByteMatchesNativeDecodingAtEachPosition() throws {
         for byte in UInt8.min...UInt8.max {
             for position in 0..<8 {
                 var encoded = Data("AAAAAAAA".utf8)
@@ -35,9 +35,13 @@ struct WorkerImageEnvelopeTests {
                 try Self.expectNativeParity(Self.frame(encoded: encoded))
             }
         }
-        for first in UInt8.min...UInt8.max {
+    }
+
+    @Test(arguments: stride(from: 0, to: 256, by: 32).map { $0..<($0 + 32) })
+    func everyTwoByteCombinationMatchesNativeDecoding(_ firstBytes: Range<Int>) throws {
+        for first in firstBytes {
             for second in UInt8.min...UInt8.max {
-                try Self.expectNativeParity(Self.frame(encoded: Data([first, second, 0x41, 0x41])))
+                try Self.expectNativeParity(Self.frame(encoded: Data([UInt8(first), second, 0x41, 0x41])))
             }
         }
     }

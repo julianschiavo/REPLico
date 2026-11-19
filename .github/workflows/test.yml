@@ -36,51 +36,78 @@ jobs:
         include:
           - name: macOS arm64
             runner: xcode-27
-            developer_dir: /Applications/Xcode_27.2.app/Contents/Developer
+            developer_dir: /Applications/Xcode_27.app/Contents/Developer
           - name: Linux x64
             runner: ubuntu-24.04
           - name: Linux arm64
             runner: ubuntu-24.04-arm
-    timeout-minutes: 60
+    timeout-minutes: 20
     runs-on: ${{ matrix.runner }}
     env:
       DEVELOPER_DIR: ${{ matrix.developer_dir }}
+      # Both Linux architectures run the same immutable Swift 6.4.0 Noble image.
+      SWIFT_TEST_IMAGE: ${{ startsWith(matrix.runner, 'ubuntu-') && 'swift:6.4.0-noble@sha256:31d14d727f4451f25e29bac9c42563a098c39ac66415e8bad970f48038e38aca' || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.revision || github.sha }}
           persist-credentials: false
 
-      # Ubuntu builds SwiftSyntax from source. Reuse its build state only with the same runner image and toolchain.
-      - name: Identify Linux build environment
-        if: runner.os == 'Linux'
-        id: linux
+      - name: Identify SwiftSyntax and project build caches
+        id: build
+        env:
+          CONFIGURATION: ${{ hashFiles('Package.swift', 'Package.resolved', '.github/workflows/test.yml', 'scripts/build_cache.py', 'scripts/test.sh', 'scripts/runtime.py') }}
         run: |
-          toolchain=$(swiftc -print-target-info | sha256sum | cut -d' ' -f1)
-          echo "prefix=swift-build-v1-${ImageVersion:?}-$toolchain" >> "$GITHUB_OUTPUT"
+          revision=$(jq -er '.pins[] | select(.identity == "swift-syntax") | .state.revision' Package.resolved)
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            platform=${SWIFT_TEST_IMAGE##*:}
+            host_build=
+          else
+            echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "$GITHUB_ENV"
+            xcode=$(plutil -extract ProductBuildVersion raw "$DEVELOPER_DIR/../version.plist")
+            platform="$xcode-$(xcrun --sdk macosx --show-sdk-build-version)"
+            host_build="$(sw_vers -buildVersion)-"
+          fi
+          syntax="swift-syntax-${{ matrix.runner }}-$platform-$revision-"
+          echo "syntax=$syntax" >> "$GITHUB_OUTPUT"
+          echo "prefix=$syntax$CONFIGURATION-$host_build" >> "$GITHUB_OUTPUT"
+          inputs=$(git ls-tree HEAD -- Sources Tests Examples Plugins | git hash-object --stdin)
+          echo "inputs=$inputs" >> "$GITHUB_OUTPUT"
 
       - name: Restore SwiftPM and Node caches
         id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: &cache-paths |
-            ${{ runner.os == 'Linux' && '.build' || '.build/repositories' }}
+            .build
             .runtime/downloads
-          key: ${{ steps.linux.outputs.prefix || 'downloads-v1' }}-${{ matrix.runner }}-${{ hashFiles('Package.swift', 'Package.resolved', 'scripts/runtime.py') }}
+          key: ${{ steps.build.outputs.prefix }}${{ steps.build.outputs.inputs }}
+          # SwiftPM needs its build database as well as the compiled SwiftSyntax modules.
+          restore-keys: |
+            ${{ steps.build.outputs.prefix }}
+            ${{ steps.build.outputs.syntax }}
 
-      - name: Prepare pinned Node
+      - name: Restore timestamps for unchanged build inputs
+        run: python3 scripts/build_cache.py
+
+      - name: Prepare pinned Node on macOS
+        if: runner.os == 'macOS'
         run: scripts/runtime.py prepare
 
-      - name: Install xcbeautify on Linux
+      - name: Prepare Swift, Node and xcbeautify on Linux
         if: runner.os == 'Linux'
+        env:
+          HOMEBREW_CACHE: ${{ github.workspace }}/.build/homebrew
         run: |
+          docker pull "$SWIFT_TEST_IMAGE" &
+          pull=$!
+          scripts/runtime.py prepare
           /home/linuxbrew/.linuxbrew/bin/brew install xcbeautify
           echo /home/linuxbrew/.linuxbrew/bin >> "$GITHUB_PATH"
+          wait "$pull"
 
       - name: Run package, worker and maintenance tests
-        run: |
-          swift --version
-          scripts/test.sh
+        run: scripts/test.sh
 
       - name: Save verified caches from main
         if: >-

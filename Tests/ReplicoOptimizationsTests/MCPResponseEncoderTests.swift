@@ -22,28 +22,35 @@ struct MCPResponseEncoderTests {
 
     @Test
     func segmentedFramesReuseOnlyExactStorageAndPreserveEveryWireByte() throws {
-        let decomposed = String(repeating: "e\u{301}\"\\\n", count: 15_000)
+        let decomposed = String(repeating: "e\u{301}\"\\\n", count: 15_000) + "/"
         let otherStorage = String(decoding: Array(decomposed.utf8), as: UTF8.self)
-        let composed = String(repeating: "é\"\\\n", count: 15_000)
+        let composed = String(repeating: "é\"\\\n", count: 15_000) + "/"
         var encoder = MCPResponseEncoder()
+        let textEncoder = JSONEncoder()
+        textEncoder.outputFormatting = [.withoutEscapingSlashes]
         func encode(_ text: String, id: String, flag: Bool?) throws -> MCPResponseEncoder.Frame? {
             let item = Tool.Content.text(text: text, annotations: nil, _meta: nil)
             let response = Envelope(id: id, result: CallTool.Result(content: [item], isError: flag))
             let outcome = try encoder.frame(for: response)
-            let regular = try MCPResponseEncoder().encode(response) + Data([10])
+            let identifier = String(decoding: try JSONEncoder().encode(id), as: UTF8.self)
+            let content = String(decoding: try textEncoder.encode(text), as: UTF8.self)
+            let status = flag.map { #","isError":\#($0)"# } ?? ""
+            let wire =
+                #"{"jsonrpc":"2.0","id":\#(identifier),"result":{"content":[{"type":"text","text":\#(content)}]\#(status)}}"#
+            let expected = Data((wire + "\n").utf8)
             switch outcome {
             case .segments(let header, let body):
-                #expect(Data(header.readableBytesView) + Data(body.readableBytesView) == regular)
+                #expect(Data(header.readableBytesView) + Data(body.readableBytesView) == expected)
             case .contiguous(let bytes):
-                #expect(Data(bytes.readableBytesView) == regular)
+                #expect(Data(bytes.readableBytesView) == expected)
             case nil:
-                break
+                #expect(try encoder.encode(response) + Data([10]) == expected)
             }
             return outcome
         }
         let first = try encode(decomposed, id: "first", flag: false)
         #expect(first == nil)
-        let second = try encode(decomposed, id: "second\u{0}😀", flag: false)
+        let second = try encode(decomposed, id: "second/\u{0}😀", flag: false)
         let third = try encode(decomposed, id: "third", flag: false)
         let fourth = try encode(decomposed, id: "fourth", flag: false)
         guard case .contiguous(let seed) = second, case .segments(_, let body) = third,

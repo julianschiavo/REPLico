@@ -164,7 +164,7 @@ jobs:
           release_id=$(jq -er .databaseId "$RUNNER_TEMP/state.json")
           draft=$(jq -r .isDraft "$RUNNER_TEMP/state.json")
           assets="repos/$repo/releases/$release_id/assets?per_page=100"
-          gh api --paginate --slurp "$assets" --jq 'add' > "$RUNNER_TEMP/assets.json"
+          gh api --paginate --slurp "$assets" | jq 'add // []' > "$RUNNER_TEMP/assets.json"
           for file in *; do
             digest="sha256:$(sha256sum "$file" | cut -d ' ' -f1)"
             if jq -e --arg file "$file" 'any(.[]; .name == $file)' "$RUNNER_TEMP/assets.json" >/dev/null; then
