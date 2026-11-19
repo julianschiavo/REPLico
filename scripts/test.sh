@@ -7,6 +7,11 @@ swift_test=(swift test --disable-automatic-resolution)
 if [[ ${GITHUB_ACTIONS:-} == true ]]; then
     if [[ ${RUNNER_OS:-} == Linux ]]; then
         swift_test=(stdbuf -o0 -e0 "${swift_test[@]}")
+        if [[ -n ${SWIFT_TEST_IMAGE:-} ]]; then
+            swift_test=(docker run --rm --init --user "$(id -u):$(id -g)"
+                --volume "$PWD:$PWD" --workdir "$PWD" --env HOME=/tmp
+                --env NSUnbufferedIO --env SWIFTNIO_STRICT "$SWIFT_TEST_IMAGE" "${swift_test[@]}")
+        fi
     fi
     NSUnbufferedIO=YES SWIFTNIO_STRICT=1 "${swift_test[@]}" 2>&1 |
         xcbeautify --renderer github-actions --preserve-unbeautified
