@@ -17,8 +17,6 @@ let package = Package(
         .library(name: "ReplicoMCP", targets: ["ReplicoMCP"]),
         .library(name: "ReplicoKit", targets: ["ReplicoKit", "ReplicoNode"]),
         .library(name: "ReplicoKitExternalNode", targets: ["ReplicoKit"]),
-        .executable(name: "math", targets: ["Math"]),
-        .executable(name: "math-complex", targets: ["MathComplex"]),
     ],
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-subprocess.git", exact: "1.0.2"),
@@ -26,7 +24,6 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.105.0"),
         .package(url: "https://github.com/apple/swift-system.git", from: "1.9.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
-        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.2"),
         .package(url: "https://github.com/swiftlang/swift-syntax.git", exact: "604.0.0"),
     ],
     targets: [
@@ -76,21 +73,6 @@ let package = Package(
         ),
         .target(name: "ReplicoKit", dependencies: ["ReplicoCore", "ReplicoMCP", "ReplicoKitMacros"]),
         .target(name: "ReplicoNode", plugins: ["ReplicoResources"]),
-        .executableTarget(
-            name: "Math",
-            dependencies: ["ReplicoKit", "ReplicoNode"],
-            path: "Examples/Math",
-            exclude: ["README.md"]
-        ),
-        .executableTarget(
-            name: "MathComplex",
-            dependencies: [
-                "ReplicoKit", "ReplicoNode",
-                .product(name: "ArgumentParser", package: "swift-argument-parser"),
-            ],
-            path: "Examples/MathComplex",
-            exclude: ["README.md"]
-        ),
         .testTarget(name: "ReplicoCoreTests", dependencies: ["ReplicoCore"]),
         .testTarget(name: "ReplicoOptimizationsTests", dependencies: ["ReplicoOptimizations", "ReplicoCore"]),
         .testTarget(

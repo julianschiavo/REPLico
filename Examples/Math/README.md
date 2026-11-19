@@ -1,12 +1,14 @@
 # Math
 
-This example registers four Swift tools under the JavaScript namespace `math`. The default `ReplicoApplication` entry point serves them over stdio.
+This standalone package registers four Swift tools under the JavaScript namespace `math`. The default `ReplicoApplication` entry point serves them over stdio.
+
+Build the example from this directory. SwiftPM downloads a compatible REPLico release and its Node runtime.
 
 ```sh
 swift build --product math
 ```
 
-Set your MCP client's command to the `math` executable in the directory printed by `swift build --show-bin-path`. Ask the client to multiply six by seven. It can call the `js` tool with this code.
+Set your MCP client's command to the `math` executable in the directory printed by `swift build --show-bin-path`. Ask it to multiply six by seven. The client can call `js` with this code.
 
 ```javascript
 nodeRepl.write(await math.mult({a: 6, b: 7}))

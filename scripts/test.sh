@@ -3,20 +3,39 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 python3 -m unittest discover -s Tests/Maintenance
-swift_test=(swift test --disable-automatic-resolution)
-if [[ ${GITHUB_ACTIONS:-} == true ]]; then
-    if [[ ${RUNNER_OS:-} == Linux ]]; then
-        swift_test=(stdbuf -o0 -e0 "${swift_test[@]}")
-        if [[ -n ${SWIFT_TEST_IMAGE:-} ]]; then
-            swift_test=(docker run --rm --init --user "$(id -u):$(id -g)"
-                --volume "$PWD:$PWD" --workdir "$PWD" --env HOME=/tmp
-                --env NSUnbufferedIO --env SWIFTNIO_STRICT "$SWIFT_TEST_IMAGE" "${swift_test[@]}")
-        fi
+export NSUnbufferedIO=YES SWIFTNIO_STRICT=1
+swift=(swift)
+if [[ ${GITHUB_ACTIONS:-} == true && ${RUNNER_OS:-} == Linux ]]; then
+    swift=(stdbuf -o0 -e0 swift)
+    if [[ -n ${SWIFT_TEST_IMAGE:-} ]]; then
+        swift=(docker run --rm --init --user "$(id -u):$(id -g)"
+            --volume "$PWD:$PWD" --workdir "$PWD" --env HOME=/tmp
+            --env NSUnbufferedIO --env SWIFTNIO_STRICT "$SWIFT_TEST_IMAGE" "${swift[@]}")
     fi
-    NSUnbufferedIO=YES SWIFTNIO_STRICT=1 "${swift_test[@]}" 2>&1 |
-        xcbeautify --renderer github-actions --preserve-unbeautified
-else
-    SWIFTNIO_STRICT=1 "${swift_test[@]}"
 fi
+
+run_swift() {
+    if [[ ${GITHUB_ACTIONS:-} == true ]]; then
+        "${swift[@]}" "$@" 2>&1 | xcbeautify --renderer github-actions --preserve-unbeautified
+    else
+        "${swift[@]}" "$@"
+    fi
+}
+
+run_swift test --disable-automatic-resolution
+
+# Exercise each standalone app against the checkout that will become the next release.
+build_example() {
+    local example="Examples/$1" fixture=".build/examples/$1"
+    mkdir -p "$fixture"
+    ln -sfn "$PWD/$example/Sources" "$fixture/Sources"
+    cp Package.resolved "$fixture/Package.resolved"
+    sed -E 's@url: "https://github\.com/julianschiavo/REPLico\.git", from: "[^"]+"@name: "replico", path: "../../.."@' \
+        "$example/Package.swift" > "$fixture/Package.swift"
+    run_swift build --package-path "$fixture" --scratch-path "$PWD/.build" --product "$2"
+}
+build_example Math math
+build_example MathComplex math-complex
+
 exec .runtime/ReplicoRuntime.artifactbundle/bin/node \
     --experimental-vm-modules --experimental-import-meta-resolve --test Tests/NodeWorker/*.test.mjs

@@ -41,13 +41,13 @@ flowchart BT
 
 ## Installation
 
-In Xcode, choose **File → Add Package Dependencies…** and enter `https://github.com/julianschiavo/REPLico.git`. Select **Up to Next Major Version** from `0.0.1`, then add **ReplicoKit** to your app target.
+In Xcode, choose **File → Add Package Dependencies…** and enter `https://github.com/julianschiavo/REPLico.git`. Use **Up to Next Major Version** starting at the [latest release](https://github.com/julianschiavo/REPLico/releases/latest), then add **ReplicoKit** to your app target.
 
 In a Swift package, add these entries to `Package.swift`.
 
 ```swift
 // In the package's dependencies array
-.package(url: "https://github.com/julianschiavo/REPLico.git", from: "0.0.1")
+.package(url: "https://github.com/julianschiavo/REPLico.git", from: "0.0.2")
 
 // In your app target's dependencies array
 .product(name: "ReplicoKit", package: "replico")
