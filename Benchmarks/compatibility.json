@@ -1,0 +1,277 @@
+[
+  {
+    "name": "snapshots-objects",
+    "cells": [
+      "let __arAccuracy01 = 1\nconst __arAccuracy01Object = { n: 1 }\nfunction __arAccuracy01Read() {\n    return [__arAccuracy01, __arAccuracy01Object.n]\n}",
+      "__arAccuracy01 = 2\n__arAccuracy01Object.n = 2\nnodeRepl.write(JSON.stringify([__arAccuracy01, __arAccuracy01Object.n, __arAccuracy01Read()]))"
+    ]
+  },
+  {
+    "name": "const-assignment",
+    "cells": [
+      "const __arAccuracy02 = 2",
+      "__arAccuracy02 += 1\nnodeRepl.write(JSON.stringify(__arAccuracy02))"
+    ]
+  },
+  {
+    "name": "const-redeclarations",
+    "cells": [
+      "const __arAccuracy03 = 3",
+      "const __arAccuracy03 = 30\nnodeRepl.write(JSON.stringify(__arAccuracy03))",
+      "let __arAccuracy03 = 31\nnodeRepl.write(JSON.stringify(__arAccuracy03))"
+    ]
+  },
+  {
+    "name": "block-shadow",
+    "cells": [
+      "const __arAccuracy04 = 4",
+      "{\n    let __arAccuracy04 = 40\n    __arAccuracy04 += 1\n}\nnodeRepl.write(JSON.stringify(__arAccuracy04))"
+    ]
+  },
+  {
+    "name": "nested-block-var",
+    "cells": [
+      "{\n    var __arAccuracy05Block = 5\n}\nif (true) {\n    var __arAccuracy05If = 50\n}\nnodeRepl.write(JSON.stringify([__arAccuracy05Block, __arAccuracy05If]))",
+      "nodeRepl.write(JSON.stringify([typeof __arAccuracy05Block, typeof __arAccuracy05If]))"
+    ]
+  },
+  {
+    "name": "top-level-loop-vars",
+    "cells": [
+      "for (var __arAccuracy06Value of [1, 2]) {\n}\nfor (var __arAccuracy06Index = 0; __arAccuracy06Index < 2; __arAccuracy06Index++) {\n}",
+      "nodeRepl.write(JSON.stringify([__arAccuracy06Value, __arAccuracy06Index]))"
+    ]
+  },
+  {
+    "name": "unreached-loop-var",
+    "cells": [
+      "for (var __arAccuracy07 of []) {\n}\nthrow new Error(\"stop\")",
+      "nodeRepl.write(JSON.stringify(typeof __arAccuracy07))"
+    ]
+  },
+  {
+    "name": "nested-loop-var",
+    "cells": [
+      "for (var __arAccuracy08Outer of [1]) {\n    var __arAccuracy08Inner = 8\n}",
+      "nodeRepl.write(JSON.stringify([__arAccuracy08Outer, typeof __arAccuracy08Inner]))"
+    ]
+  },
+  {
+    "name": "partial-lexical-pattern",
+    "cells": [
+      "const { __arAccuracy09Done, __arAccuracy09Stop = __arAccuracyMissing() } = { __arAccuracy09Done: 9 }",
+      "nodeRepl.write(JSON.stringify([__arAccuracy09Done, typeof __arAccuracy09Stop]))"
+    ]
+  },
+  {
+    "name": "partial-var-pattern",
+    "cells": [
+      "var { __arAccuracy10Done, __arAccuracy10Stop = __arAccuracyMissing() } = { __arAccuracy10Done: 10 }",
+      "nodeRepl.write(JSON.stringify([__arAccuracy10Done, typeof __arAccuracy10Stop]))"
+    ]
+  },
+  {
+    "name": "write-before-var-declaration",
+    "cells": [
+      "__arAccuracy11 = 11\nthrow new Error(\"stop\")\nvar __arAccuracy11",
+      "nodeRepl.write(JSON.stringify(__arAccuracy11))"
+    ]
+  },
+  {
+    "name": "function-write-before-var-declaration",
+    "cells": [
+      "__arAccuracy12Set()\nthrow new Error(\"stop\")\nvar __arAccuracy12\nfunction __arAccuracy12Set() {\n    __arAccuracy12 = 12\n}",
+      "nodeRepl.write(JSON.stringify([typeof __arAccuracy12, typeof __arAccuracy12Set]))"
+    ]
+  },
+  {
+    "name": "unused-hoisted-function",
+    "cells": [
+      "throw new Error(\"stop\")\nfunction __arAccuracy13() {\n    return 13\n}",
+      "nodeRepl.write(JSON.stringify(typeof __arAccuracy13))"
+    ]
+  },
+  {
+    "name": "used-hoisted-function",
+    "cells": [
+      "const __arAccuracy14Value = __arAccuracy14()\nthrow new Error(\"stop\")\nfunction __arAccuracy14() {\n    return 14\n}",
+      "nodeRepl.write(JSON.stringify([__arAccuracy14Value, typeof __arAccuracy14]))"
+    ]
+  },
+  {
+    "name": "export-declaration",
+    "cells": [
+      "export const __arAccuracy15 = 15\nnodeRepl.write(JSON.stringify(__arAccuracy15))",
+      "nodeRepl.write(JSON.stringify(typeof __arAccuracy15))"
+    ]
+  },
+  {
+    "name": "export-list",
+    "cells": [
+      "let __arAccuracy16 = 16\nexport { __arAccuracy16 }\nnodeRepl.write(JSON.stringify(__arAccuracy16))",
+      "nodeRepl.write(JSON.stringify(typeof __arAccuracy16))"
+    ]
+  },
+  {
+    "name": "eval-prior-const",
+    "cells": [
+      "const __arAccuracy17 = 17",
+      "eval(\"__arAccuracy17 = 170\")",
+      "nodeRepl.write(JSON.stringify(__arAccuracy17))"
+    ]
+  },
+  {
+    "name": "class-static-scopes",
+    "cells": [
+      "const __arAccuracy18 = 18",
+      "class __arAccuracy18Shadow {\n    static {\n        var __arAccuracy18 = 180\n        __arAccuracy18 += 1\n    }\n}\nnodeRepl.write(JSON.stringify(__arAccuracy18))",
+      "class __arAccuracy18Write {\n    static {\n        __arAccuracy18 += 1\n    }\n}\nnodeRepl.write(JSON.stringify(__arAccuracy18))"
+    ]
+  },
+  {
+    "name": "catch-shadow",
+    "cells": [
+      "const __arAccuracy19 = 19",
+      "try {\n    throw 190\n} catch (__arAccuracy19) {\n    __arAccuracy19 += 1\n}\nnodeRepl.write(JSON.stringify(__arAccuracy19))"
+    ]
+  },
+  {
+    "name": "failed-lexical-replacement",
+    "cells": [
+      "let __arAccuracy20 = 20",
+      "__arAccuracy20 = 21\nlet __arAccuracy20 = 22",
+      "nodeRepl.write(JSON.stringify(__arAccuracy20))"
+    ]
+  },
+  {
+    "name": "unicode-shorthand-and-utf16-offsets",
+    "cells": [
+      "const __arAccuracy21Label = '\ud83e\udd8a'\nlet __arAccuracy21\u03c0 = 3\nlet __arAccuracy21\ud835\udcb3 = 4",
+      "__arAccuracy21\u03c0 += 1\n__arAccuracy21\ud835\udcb3 *= 2\nnodeRepl.write(JSON.stringify({ __arAccuracy21Label, __arAccuracy21\u03c0, __arAccuracy21\ud835\udcb3 }))"
+    ]
+  },
+  {
+    "name": "dynamic-builtins",
+    "cells": [
+      "const __arAccuracy22Path = await import('node:path')\nconst __arAccuracy22Util = await import('node:util')\nnodeRepl.write(JSON.stringify([__arAccuracy22Path.basename('/one/two'), __arAccuracy22Path.join('one', 'two'), __arAccuracy22Util.format('%s:%d', 'value', 7)]))",
+      "nodeRepl.write(JSON.stringify([typeof __arAccuracy22Path.basename, __arAccuracy22Util.format('%s', 'retained')]))"
+    ]
+  },
+  {
+    "name": "static-import-rejection-is-atomic",
+    "cells": [
+      "let __arAccuracy23Before = 23\nimport { basename as __arAccuracy23Import } from 'node:path'",
+      "nodeRepl.write(JSON.stringify([typeof __arAccuracy23Before, typeof __arAccuracy23Import]))"
+    ]
+  },
+  {
+    "name": "process-import-rejection-and-prior-initialization",
+    "cells": [
+      "let __arAccuracy24Before = 24\nconst __arAccuracy24Process = await import('node:process')",
+      "nodeRepl.write(JSON.stringify([typeof __arAccuracy24Before, typeof __arAccuracy24Process, typeof process]))"
+    ]
+  },
+  {
+    "name": "immutable-helper-context-and-metadata",
+    "cells": [
+      "let __arAccuracy25Failures = 0\nfor (const __arAccuracy25Action of [\n    () => {\n        nodeRepl.cwd = '/changed'\n    },\n    () => {\n        nodeRepl.requestMeta.__arAccuracy25 = true\n    },\n    () => {\n        nodeRepl.env.__arAccuracy25 = 'changed'\n    }\n]) {\n    try {\n        __arAccuracy25Action()\n    } catch {\n        __arAccuracy25Failures += 1\n    }\n}\nnodeRepl.write(JSON.stringify([__arAccuracy25Failures, typeof nodeRepl.cwd, typeof nodeRepl.homeDir, typeof nodeRepl.tmpDir]))",
+      "nodeRepl.write(JSON.stringify([nodeRepl.cwd !== '/changed', typeof nodeRepl.requestMeta.__arAccuracy25, typeof nodeRepl.env.__arAccuracy25]))"
+    ]
+  },
+  {
+    "name": "object-reference-identity-and-failed-shadow",
+    "cells": [
+      "let __arAccuracy26Object = { n: 1 }\nlet __arAccuracy26Alias = __arAccuracy26Object\nconst __arAccuracy26Array = [__arAccuracy26Object]\nfunction __arAccuracy26Read() {\n    return __arAccuracy26Object\n}",
+      "__arAccuracy26Object.n = 2\nnodeRepl.write(JSON.stringify([__arAccuracy26Alias === __arAccuracy26Object, __arAccuracy26Array[0] === __arAccuracy26Object, __arAccuracy26Read() === __arAccuracy26Object, __arAccuracy26Alias.n]))",
+      "let __arAccuracy26Object = (__arAccuracy26Alias.n = 3, (() => {\n    throw new Error('stop')\n})())",
+      "nodeRepl.write(JSON.stringify([__arAccuracy26Alias === __arAccuracy26Object, __arAccuracy26Read() === __arAccuracy26Object, __arAccuracy26Object.n]))"
+    ]
+  },
+  {
+    "name": "caught-image-helper-failure",
+    "cells": [
+      "let __arAccuracy27Caught = false\ntry {\n    await nodeRepl.emitImage(new Uint8Array([1, 2]))\n} catch {\n    __arAccuracy27Caught = true\n}\nnodeRepl.write(JSON.stringify(__arAccuracy27Caught))",
+      "nodeRepl.write(JSON.stringify([__arAccuracy27Caught, 2 + 3]))"
+    ]
+  },
+  {
+    "name": "unobserved-image-helper-failure-preserves-bindings",
+    "cells": [
+      "let __arAccuracy28Before = 28\nnodeRepl.emitImage(new Uint8Array([1, 2]))",
+      "nodeRepl.write(JSON.stringify([typeof __arAccuracy28Before, typeof __arAccuracy28Before === 'undefined' ? null : __arAccuracy28Before]))"
+    ]
+  },
+  {
+    "name": "interleaved-console-write",
+    "cells": [
+      "console.log(\"A\")\nnodeRepl.write(\"B\")\nconsole.log(\"C\")"
+    ]
+  },
+  {
+    "name": "named-warning-output",
+    "cells": [
+      "const __arAccuracyNamedWarning = 1",
+      "__arAccuracyNamedWarning += 1\nnodeRepl.write(\"body\", \"named\")"
+    ]
+  },
+  {
+    "name": "write-returns-void",
+    "cells": [
+      "{\n    const result = nodeRepl.write(\"x\")\n    nodeRepl.write(JSON.stringify({ type: typeof result, then: typeof result?.then }))\n}"
+    ]
+  },
+  {
+    "name": "write-invalid-id-is-synchronous",
+    "cells": [
+      "{\n    let caughtInvalidID = false\n    try {\n        nodeRepl.write(\"x\", \"\")\n    } catch {\n        caughtInvalidID = true\n    }\n    nodeRepl.write(JSON.stringify({ caughtInvalidID }))\n}"
+    ]
+  },
+  {
+    "name": "stable-environment-and-fresh-metadata",
+    "cells": [
+      "const __arAccuracyEnvironment = nodeRepl.env\nconst __arAccuracyMetadata = nodeRepl.requestMeta",
+      "nodeRepl.write(JSON.stringify([typeof nodeRepl.env, Object.isFrozen(nodeRepl.env), __arAccuracyEnvironment === nodeRepl.env, __arAccuracyMetadata === nodeRepl.requestMeta]))"
+    ]
+  },
+  {
+    "name": "hashbang-rejected-with-and-without-bindings",
+    "cells": [
+      "#!/usr/bin/env node\nvoid 0",
+      "let __arAccuracyHashbang = 1",
+      "#!/usr/bin/env node\nnodeRepl.write(__arAccuracyHashbang)",
+      "nodeRepl.write(__arAccuracyHashbang)"
+    ]
+  },
+  {
+    "name": "carried-export-alias",
+    "cells": [
+      "let carriedExportValue=7;globalThis.exportSideEffect=false",
+      "globalThis.exportSideEffect=true;export{carriedExportValue as alias}",
+      "nodeRepl.write(JSON.stringify([globalThis.exportSideEffect,carriedExportValue]))"
+    ]
+  },
+  {
+    "name": "carried-export-string-alias",
+    "cells": [
+      "let carriedExportValue=7;globalThis.exportSideEffect=false",
+      "globalThis.exportSideEffect=true;export{carriedExportValue as \"alias-name\"}",
+      "nodeRepl.write(JSON.stringify([globalThis.exportSideEffect,carriedExportValue]))"
+    ]
+  },
+  {
+    "name": "carried-export-default-alias",
+    "cells": [
+      "let carriedExportValue=7;globalThis.exportSideEffect=false",
+      "globalThis.exportSideEffect=true;export{carriedExportValue as default}",
+      "nodeRepl.write(JSON.stringify([globalThis.exportSideEffect,carriedExportValue]))"
+    ]
+  },
+  {
+    "name": "catch-var-shadow",
+    "cells": [
+      "globalThis.catchSideEffect=false",
+      "globalThis.catchSideEffect=true;var outerValue=0;try{throw 1}catch(outerValue){var outerValue=2;globalThis.innerValue=outerValue};nodeRepl.write(JSON.stringify([outerValue,globalThis.innerValue]))",
+      "nodeRepl.write(JSON.stringify([globalThis.catchSideEffect,outerValue]))"
+    ]
+  }
+]

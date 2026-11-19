@@ -1,0 +1,45 @@
+name: Format
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, edited]
+  workflow_call:
+    inputs:
+      revision:
+        description: Commit to check
+        type: string
+        default: ''
+
+concurrency:
+  group: replico-format-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NSUnbufferedIO: 'YES'
+
+jobs:
+  format:
+    name: Swift format
+    timeout-minutes: 5
+    runs-on: xcode-27
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.revision || github.sha }}
+          persist-credentials: false
+
+      - name: Check tracked Swift files
+        run: |
+          git ls-files -z -- '*.swift' | xargs -0 swift format format --in-place --configuration .swift-format --
+          git diff --exit-code -- '*.swift'

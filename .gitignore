@@ -1,0 +1,37 @@
+# SwiftPM products, dependency checkouts, and local IDE state.
+.build/
+.swiftpm/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# Downloaded development runtimes, dependencies, and local artifacts.
+.runtime/
+ReplicoRuntime*.artifactbundle/
+ReplicoRuntime*.artifactbundle.zip
+ReplicoRuntime*.artifactbundleindex
+.cache/
+dist/
+work/
+node_modules/
+__pycache__/
+*.py[cod]
+
+# Benchmark results, profiler captures, and coverage output.
+/Benchmarks/results/
+*.trace
+*.cpuprofile
+*.heapsnapshot
+*.xcresult
+*.dSYM/
+coverage/
+*.profraw
+*.profdata
+*.lcov
+
+# Local configuration and operating-system files.
+.DS_Store
+.env
+.env.*
+!.env.example
+*.log

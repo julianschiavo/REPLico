@@ -1,0 +1,182 @@
+name: Release
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, edited, labeled, unlabeled]
+  pull_request_target:
+    branches: [main]
+    types: [closed]
+
+permissions: {}
+
+# Label checks run independently per PR. Merged PRs reserve the release lane
+# before choosing a tag, so concurrent version bumps cannot overwrite each other.
+concurrency:
+  group: release-${{ github.event_name == 'pull_request_target' && github.event.pull_request.merged && 'main' || github.event.pull_request.number }}
+  queue: max
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NSUnbufferedIO: "YES"
+
+jobs:
+  label:
+    name: Release label
+    if: github.event_name == 'pull_request' || github.event.pull_request.merged
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      bump: ${{ steps.label.outputs.bump }}
+    steps:
+      - id: label
+        name: Require one release label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" > "$RUNNER_TEMP/pr.json"
+          else
+            jq '.pull_request' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr.json"
+          fi
+          bump=$(jq -er '
+            [.labels[].name | select(. == "release:major" or . == "release:minor" or . == "release:patch")]
+            | if length == 1 then .[0] | ltrimstr("release:")
+              else error("Choose exactly one of release:major, release:minor or release:patch.") end
+          ' "$RUNNER_TEMP/pr.json")
+          echo "bump=$bump" >> "$GITHUB_OUTPUT"
+
+  format:
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.merged
+    uses: ./.github/workflows/format.yml
+    permissions:
+      contents: read
+    with:
+      revision: ${{ github.event.pull_request.merge_commit_sha }}
+
+  test:
+    cache-mode: write
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.merged
+    uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
+    with:
+      revision: ${{ github.event.pull_request.merge_commit_sha }}
+
+  package:
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.merged
+    cache-mode: write
+    needs: [label, format, test]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.number }}
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select release version
+        id: version
+        env:
+          BUMP: ${{ needs.label.outputs.bump }}
+        run: |
+          version=$(scripts/runtime.py next-version --merge "$(git rev-parse HEAD)" --bump "$BUMP")
+          echo "number=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .runtime/downloads
+          key: release-node-archives-${{ hashFiles('scripts/runtime.py') }}
+      - name: Build and verify runtime bundles
+        env:
+          VERSION: ${{ steps.version.outputs.number }}
+        run: |
+          scripts/runtime.py release --repository "$GITHUB_REPOSITORY" --version "$VERSION" --output "$RUNNER_TEMP/release"
+          cd "$RUNNER_TEMP/release"
+          sha256sum --strict --check SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: upload
+        with:
+          name: runtime-${{ steps.version.outputs.number }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  publish:
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      TAG: v${{ needs.package.outputs.version }}
+      MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.package.outputs.artifact }}
+          path: ${{ runner.temp }}/release
+          merge-multiple: true
+      - name: Tag the merged source with its release manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          (cd "$RUNNER_TEMP/release" && sha256sum --strict --check SHA256SUMS)
+          if git show-ref --verify --quiet "refs/tags/$TAG"; then
+            test "$(git show -s --format=%P "$TAG^{commit}")" = "$MERGE_SHA"
+            test "$(git diff --name-only "$MERGE_SHA" "$TAG")" = Package.swift
+            git show "$TAG:Package.swift" | cmp - "$RUNNER_TEMP/release/Package.swift"
+          else
+            cp "$RUNNER_TEMP/release/Package.swift" Package.swift
+            git add -- Package.swift
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "Release $TAG"
+            git tag "$TAG"
+            gh auth setup-git
+            git push origin "refs/tags/$TAG"
+          fi
+      - name: Verify assets and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          cd "$RUNNER_TEMP/release"
+          repo="$GITHUB_REPOSITORY"
+          if ! gh release view "$TAG" --repo "$repo" --json databaseId,isDraft > "$RUNNER_TEMP/state.json"; then
+            gh release create "$TAG" --repo "$repo" --verify-tag --draft --title "$TAG" --notes "Includes #$PR_NUMBER."
+            gh release view "$TAG" --repo "$repo" --json databaseId,isDraft > "$RUNNER_TEMP/state.json"
+          fi
+          release_id=$(jq -er .databaseId "$RUNNER_TEMP/state.json")
+          draft=$(jq -r .isDraft "$RUNNER_TEMP/state.json")
+          assets="repos/$repo/releases/$release_id/assets?per_page=100"
+          gh api --paginate --slurp "$assets" --jq 'add' > "$RUNNER_TEMP/assets.json"
+          for file in *; do
+            digest="sha256:$(sha256sum "$file" | cut -d ' ' -f1)"
+            if jq -e --arg file "$file" 'any(.[]; .name == $file)' "$RUNNER_TEMP/assets.json" >/dev/null; then
+              jq -e --arg f "$file" --arg d "$digest" 'any(.[]; .name == $f and .digest == $d)' "$RUNNER_TEMP/assets.json" >/dev/null
+            else
+              test "$draft" = true
+              gh release upload "$TAG" "$file" --repo "$repo" >&2
+            fi
+            printf '%s  %s\n' "${digest#sha256:}" "$file"
+          done > "$RUNNER_TEMP/expected"
+          gh api --paginate "$assets" --jq '.[] | [(.digest | ltrimstr("sha256:")), .name] | join("  ")' | sort > "$RUNNER_TEMP/received"
+          sort "$RUNNER_TEMP/expected" | diff - "$RUNNER_TEMP/received"
+          if [[ "$draft" == true ]]; then
+            gh release edit "$TAG" --repo "$repo" --draft=false
+          fi

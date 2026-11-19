@@ -1,0 +1,38 @@
+[
+  {
+    "name": "media-small.jpg",
+    "width": 64,
+    "height": 48,
+    "quality": 90,
+    "mimeType": "image/jpeg",
+    "byteCount": 6339,
+    "sha256": "7b6b7377af1e696c1894a88fb8d264993536238c4494351bd23243d7404f3562"
+  },
+  {
+    "name": "media-regular.jpg",
+    "width": 256,
+    "height": 192,
+    "quality": 90,
+    "mimeType": "image/jpeg",
+    "byteCount": 92739,
+    "sha256": "fe0cf4dc00ad010eeed2274a012d4873929ef536fac714649d223c8bac53a944"
+  },
+  {
+    "name": "media-large.jpg",
+    "width": 640,
+    "height": 512,
+    "quality": 90,
+    "mimeType": "image/jpeg",
+    "byteCount": 613421,
+    "sha256": "e2a8b9423bf659a64fceafad3b8dec12d3e2b2dd302bb37893ad4a44d6cdf4a5"
+  },
+  {
+    "name": "media-maximum.jpg",
+    "width": 768,
+    "height": 768,
+    "quality": 94,
+    "mimeType": "image/jpeg",
+    "byteCount": 1337295,
+    "sha256": "60d6b57fc858d78a3fe5c63abe734a2c8d648bf62c12c4ab2bd100a3aa0f6bd6"
+  }
+]
