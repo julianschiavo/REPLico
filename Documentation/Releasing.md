@@ -29,3 +29,5 @@ scripts/test.sh
 ```
 
 Preparation verifies the official Node 26.13.1 download before extracting the executable and its notices.
+
+The test script builds the library and both example apps together using `Tests/Packages.xcworkspace`. The workspace has its own SwiftPM lockfile because MathComplex also uses Swift Argument Parser. SwiftPM 6.4 marks its `--multiroot-data-file` option unsupported, so check this invocation when upgrading the CI toolchain.

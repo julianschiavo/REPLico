@@ -56,9 +56,9 @@ jobs:
       - name: Identify SwiftSyntax and project build caches
         id: build
         env:
-          CONFIGURATION: ${{ hashFiles('Package.swift', 'Package.resolved', '.github/workflows/test.yml', 'scripts/build_cache.py', 'scripts/test.sh', 'scripts/runtime.py') }}
+          CONFIGURATION: ${{ hashFiles('Package.swift', 'Examples/*/Package.swift', 'Tests/Packages.xcworkspace/**', '.github/workflows/test.yml', 'scripts/build_cache.py', 'scripts/test.sh', 'scripts/runtime.py') }}
         run: |
-          revision=$(jq -er '.pins[] | select(.identity == "swift-syntax") | .state.revision' Package.resolved)
+          revision=$(jq -er '.pins[] | select(.identity == "swift-syntax") | .state.revision' Tests/Packages.xcworkspace/xcshareddata/swiftpm/Package.resolved)
           if [[ "$RUNNER_OS" == Linux ]]; then
             platform=${SWIFT_TEST_IMAGE##*:}
             host_build=
