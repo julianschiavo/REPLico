@@ -4,6 +4,7 @@ import ReplicoOptimizations
 import Foundation
 import MCP
 import NIOCore
+import NIOPosix
 import Testing
 
 struct StandardIOTransportTests {
@@ -148,11 +149,14 @@ struct StandardIOTransportTests {
                         try await sender.send(MCPResponseEncoder().encode(response))
                     }
                 }
-                var frame = Data()
-                while frame.count < expected.count {
-                    let remaining = expected.count - frame.count
-                    let next = try #require(try reader.read(upToCount: min(65_536, remaining)))
-                    frame.append(next)
+                let frame = try await NIOThreadPool.singleton.runIfActive {
+                    var frame = Data()
+                    while frame.count < expected.count {
+                        let remaining = expected.count - frame.count
+                        let next = try #require(try reader.read(upToCount: min(65_536, remaining)))
+                        frame.append(next)
+                    }
+                    return frame
                 }
                 try await warming.value
                 #expect(frame == expected)
@@ -166,7 +170,9 @@ struct StandardIOTransportTests {
             let sending = Task {
                 try await sender.send(body, after: header)
             }
-            let started = try reader.read(upToCount: 1)
+            let started = try await NIOThreadPool.singleton.runIfActive {
+                try reader.read(upToCount: 1)
+            }
             #expect(started == Data([123]))
             switch interruption {
             case .cancelWrite:

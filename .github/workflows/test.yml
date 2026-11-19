@@ -51,14 +51,22 @@ jobs:
           ref: ${{ inputs.revision || github.sha }}
           persist-credentials: false
 
-      - name: Restore dependency downloads
-        id: downloads
+      # Ubuntu builds SwiftSyntax from source. Reuse its build state only with the same runner image and toolchain.
+      - name: Identify Linux build environment
+        if: runner.os == 'Linux'
+        id: linux
+        run: |
+          toolchain=$(swiftc -print-target-info | sha256sum | cut -d' ' -f1)
+          echo "prefix=swift-build-v1-${ImageVersion:?}-$toolchain" >> "$GITHUB_OUTPUT"
+
+      - name: Restore SwiftPM and Node caches
+        id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            .build/repositories
+          path: &cache-paths |
+            ${{ runner.os == 'Linux' && '.build' || '.build/repositories' }}
             .runtime/downloads
-          key: downloads-v1-${{ matrix.runner }}-${{ hashFiles('Package.swift', 'Package.resolved', 'scripts/runtime.py') }}
+          key: ${{ steps.linux.outputs.prefix || 'downloads-v1' }}-${{ matrix.runner }}-${{ hashFiles('Package.swift', 'Package.resolved', 'scripts/runtime.py') }}
 
       - name: Prepare pinned Node
         run: scripts/runtime.py prepare
@@ -74,16 +82,14 @@ jobs:
           swift --version
           scripts/test.sh
 
-      - name: Save verified downloads from main
+      - name: Save verified caches from main
         if: >-
-          success() && steps.downloads.outputs.cache-hit != 'true' &&
+          success() && steps.cache.outputs.cache-hit != 'true' &&
           ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
           (github.event_name == 'pull_request_target' && github.event.action == 'closed' &&
           github.event.pull_request.merged && github.event.pull_request.base.ref == 'main' &&
           inputs.revision == github.event.pull_request.merge_commit_sha))
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            .build/repositories
-            .runtime/downloads
-          key: ${{ steps.downloads.outputs.cache-primary-key }}
+          path: *cache-paths
+          key: ${{ steps.cache.outputs.cache-primary-key }}

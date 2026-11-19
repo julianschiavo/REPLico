@@ -1,6 +1,5 @@
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
-import { once } from "node:events"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -14,8 +13,8 @@ class WorkerClient {
     #events = []
     #waiting = []
     #buffer = ""
-    #exited
-    #exitResult
+    #closed
+    #exitError
     #stderr = ""
 
     constructor() {
@@ -23,15 +22,19 @@ class WorkerClient {
             cwd: path.dirname(workerPath),
             stdio: ["pipe", "pipe", "pipe"],
         })
-        this.#exited = once(this.#child, "exit").then(result => {
-            this.#exitResult = result
-            const error = new Error(`Worker exited: ${result.join(", ")}; ${this.#stderr}`)
-            this.#evaluation?.reject(error)
-            this.#evaluation = undefined
-            for (const waiting of this.#waiting.splice(0)) {
-                waiting.reject(error)
-            }
-            return result
+        this.#child.once("error", error => {
+            this.#stderr += error.message
+        })
+        this.#closed = new Promise(resolve => {
+            this.#child.once("close", (code, signal) => {
+                this.#exitError = new Error(`Worker exited: ${code ?? signal}; ${this.#stderr}`)
+                this.#evaluation?.reject(this.#exitError)
+                this.#evaluation = undefined
+                for (const waiting of this.#waiting.splice(0)) {
+                    waiting.reject(this.#exitError)
+                }
+                resolve([code, signal])
+            })
         })
         this.#child.stderr.setEncoding("utf8")
         this.#child.stderr.on("data", chunk => {
@@ -73,6 +76,9 @@ class WorkerClient {
 
     evaluate(parameters, executionID) {
         assert.equal(this.#evaluation, undefined)
+        if (this.#exitError !== undefined) {
+            return Promise.reject(this.#exitError)
+        }
         const result = new Promise((resolve, reject) => {
             this.#evaluation = { executionID, resolve, reject }
             this.send({ evaluate: { ...parameters, executionID } })
@@ -94,20 +100,23 @@ class WorkerClient {
         if (event !== undefined) {
             return Promise.resolve(event)
         }
+        if (this.#exitError !== undefined) {
+            return Promise.reject(this.#exitError)
+        }
         return new Promise((resolve, reject) => {
             this.#waiting.push({ resolve, reject })
         })
     }
 
     async close() {
-        if (this.#exitResult === undefined) {
+        if (this.#exitError === undefined) {
             if (this.#evaluation !== undefined) {
                 this.#child.kill("SIGTERM")
             } else {
                 this.#child.stdin.end()
             }
         }
-        return this.#exited
+        return this.#closed
     }
 }
 
@@ -144,6 +153,9 @@ test("worker startup, raw evaluation, output, and EOF shutdown use enum JSONL fr
     assert.equal(result.succeeded, true)
     assert.deepEqual(await client.nextEvent(), { event: "output", executionID: "output", content: { type: "text", text: "two", itemID: "example" } })
     assert.deepEqual(await client.nextEvent(), { event: "output", executionID: "output", content: { type: "text", text: "one" } })
+    const waiting = assert.rejects(client.nextEvent(), /Worker exited/)
+    await client.close()
+    await waiting
 })
 
 test("one-way service replies resolve only their originating execution", async t => {
@@ -252,18 +264,19 @@ await nodeRepl.write(jsonCalls);
     assert.equal(result.succeeded, true, result.error?.message)
 })
 
-test("fatal asynchronous failures emit an attributed event and terminate the worker", async () => {
+test("fatal asynchronous failures emit an attributed event and terminate the worker", async t => {
     const client = new WorkerClient()
+    t.after(() => client.close())
     await client.nextEvent()
     const evaluating = client.evaluate(parameters("queueMicrotask(() => { throw Error('asynchronous failure'); }); await new Promise(() => {});"), "fatal")
-    evaluating.catch(() => undefined)
+    await assert.rejects(evaluating, /Worker exited/)
+    assert.equal((await client.close())[0], 1)
     const event = await client.nextEvent()
     assert.equal(event.event, "fatal")
     assert.equal(event.executionID, "fatal")
     assert.equal(event.error.message, "asynchronous failure")
-    await assert.rejects(evaluating, /Worker exited/)
-    const result = await client.close()
-    assert.equal(result[0], 1)
+    await assert.rejects(client.nextEvent(), /Worker exited/)
+    await assert.rejects(client.evaluate(parameters("42"), "closed"), /Worker exited/)
 })
 
 test("a promise rejected in a later cell reports the execution that created it", async t => {

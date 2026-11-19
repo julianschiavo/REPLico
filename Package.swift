@@ -111,6 +111,7 @@ let package = Package(
                 "ReplicoCore", "ReplicoMCP",
                 .product(name: "MCP", package: "swift-sdk"),
                 .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "Logging", package: "swift-log"),
             ]
         ),

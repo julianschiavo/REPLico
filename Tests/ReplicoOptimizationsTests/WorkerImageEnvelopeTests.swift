@@ -5,8 +5,7 @@ import Testing
 
 struct WorkerImageEnvelopeTests {
     private static let id = "01234567-89AB-CDEF-0123-456789abcdef"
-    private static let prefix = Data(#"{"output":{"executionID":""#.utf8)
-    private static let middle = Data(#"","content":{"type":"image","data":""#.utf8)
+    private static let header = Data(#"{"output":{"executionID":"\#(id)","content":{"type":"image","data":""#.utf8)
     private static let mimeTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"]
 
     @Test
@@ -69,7 +68,7 @@ struct WorkerImageEnvelopeTests {
     @Test
     func everyUUIDByteAndFixedHeaderByteIsValidated() throws {
         let frame = Self.frame(encoded: Data("/9j/".utf8))
-        let payloadStart = Self.prefix.count + 36 + Self.middle.count
+        let payloadStart = Self.header.count
         for position in 0..<frame.count where !(payloadStart..<(payloadStart + 4)).contains(position) {
             for byte in UInt8.min...UInt8.max {
                 var changed = frame
@@ -99,7 +98,8 @@ struct WorkerImageEnvelopeTests {
             let source = "{\"output\":{\"executionID\":\"\(Self.id)\",\"content\":\(body)}}"
             let frame = Data(source.utf8)
             #expect(WorkerEnvelope(frame: frame) == nil)
-            try Self.expectEventParity(frame)
+            let native = try Self.output(JSONDecoder().decode(WorkerEvent.self, from: frame))
+            try Self.expectEventParity(frame, against: native)
         }
         let valid = Self.frame(encoded: Data("/9j/".utf8))
         let noncanonical: [Data] = [
@@ -162,7 +162,10 @@ struct WorkerImageEnvelopeTests {
     }
 
     private static func frame(encoded: Data, mimeType: String = "image/jpeg") -> Data {
-        prefix + Data(id.utf8) + middle + encoded + Data("\",\"mimeType\":\"\(mimeType)\"}}}".utf8)
+        var bytes = header
+        bytes.append(encoded)
+        bytes.append(contentsOf: #"","mimeType":"\#(mimeType)"}}}"#.utf8)
+        return bytes
     }
 
     private static func output(_ event: WorkerEvent) throws -> WorkerContent {
@@ -195,11 +198,10 @@ struct WorkerImageEnvelopeTests {
         #expect(content.mimeType == mimeType)
         #expect(content.text == nil)
         #expect(content.itemID == nil)
-        try Self.expectEventParity(frame)
+        try Self.expectEventParity(frame, against: content)
     }
 
-    private static func expectEventParity(_ frame: Data) throws {
-        let native = try Self.output(JSONDecoder().decode(WorkerEvent.self, from: frame))
+    private static func expectEventParity(_ frame: Data, against native: WorkerContent) throws {
         let optimized = try Self.output(WorkerEvent(frame: frame))
         #expect(native.type == optimized.type)
         #expect(native.data == optimized.data)
