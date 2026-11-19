@@ -48,6 +48,10 @@ jobs:
       # Both Linux architectures run the same immutable Swift 6.4.0 Noble image.
       SWIFT_TEST_IMAGE: ${{ startsWith(matrix.runner, 'ubuntu-') && 'swift:6.4.0-noble@sha256:31d14d727f4451f25e29bac9c42563a098c39ac66415e8bad970f48038e38aca' || '' }}
     steps:
+      - name: Prefetch the Linux Swift image during cache restoration
+        if: runner.os == 'Linux'
+        run: docker pull "$SWIFT_TEST_IMAGE" > "$RUNNER_TEMP/swift-pull.log" 2>&1 < /dev/null &
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.revision || github.sha }}
@@ -56,9 +60,9 @@ jobs:
       - name: Identify SwiftSyntax and project build caches
         id: build
         env:
-          CONFIGURATION: ${{ hashFiles('Package.swift', 'Package.resolved', '.github/workflows/test.yml', 'scripts/build_cache.py', 'scripts/test.sh', 'scripts/runtime.py') }}
+          CONFIGURATION: ${{ hashFiles('Package.swift', 'Examples/*/Package.swift', 'Tests/Packages.xcworkspace/**', '.github/workflows/test.yml', 'scripts/build_cache.py', 'scripts/test.sh', 'scripts/runtime.py') }}
         run: |
-          revision=$(jq -er '.pins[] | select(.identity == "swift-syntax") | .state.revision' Package.resolved)
+          revision=$(jq -er '.pins[] | select(.identity == "swift-syntax") | .state.revision' Tests/Packages.xcworkspace/xcshareddata/swiftpm/Package.resolved)
           if [[ "$RUNNER_OS" == Linux ]]; then
             platform=${SWIFT_TEST_IMAGE##*:}
             host_build=
@@ -94,17 +98,14 @@ jobs:
         if: runner.os == 'macOS'
         run: scripts/runtime.py prepare
 
-      - name: Prepare Swift, Node and xcbeautify on Linux
+      - name: Prepare Node and xcbeautify on Linux
         if: runner.os == 'Linux'
         env:
           HOMEBREW_CACHE: ${{ github.workspace }}/.build/homebrew
         run: |
-          docker pull "$SWIFT_TEST_IMAGE" &
-          pull=$!
           scripts/runtime.py prepare
           /home/linuxbrew/.linuxbrew/bin/brew install xcbeautify
           echo /home/linuxbrew/.linuxbrew/bin >> "$GITHUB_PATH"
-          wait "$pull"
 
       - name: Run package, worker and maintenance tests
         run: scripts/test.sh

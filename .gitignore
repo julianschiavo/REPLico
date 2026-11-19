@@ -1,6 +1,7 @@
 # SwiftPM products, dependency checkouts, and local IDE state.
 .build/
 .swiftpm/
+/Examples/*/Package.resolved
 DerivedData/
 xcuserdata/
 *.xcuserstate
