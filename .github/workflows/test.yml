@@ -109,10 +109,13 @@ jobs:
       - name: Run package, worker and maintenance tests
         run: scripts/test.sh
 
-      - name: Save verified caches from main
+      # PR runs can read main's caches and write to their own merge ref.
+      # A successful run on main seeds the shared cache for subsequent PRs.
+      - name: Save verified build cache
         if: >-
           success() && steps.cache.outputs.cache-hit != 'true' &&
-          ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+          (github.event_name == 'pull_request' ||
+          (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
           (github.event_name == 'pull_request_target' && github.event.action == 'closed' &&
           github.event.pull_request.merged && github.event.pull_request.base.ref == 'main' &&
           inputs.revision == github.event.pull_request.merge_commit_sha))
