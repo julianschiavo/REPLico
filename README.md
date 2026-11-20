@@ -47,7 +47,7 @@ In a Swift package, add these entries to `Package.swift`.
 
 ```swift
 // In the package's dependencies array
-.package(url: "https://github.com/julianschiavo/REPLico.git", from: "0.0.2")
+.package(url: "https://github.com/julianschiavo/REPLico.git", from: "0.2.0")
 
 // In your app target's dependencies array
 .product(name: "ReplicoKit", package: "replico")
@@ -83,7 +83,7 @@ struct TextApplication: ReplicoApplication {
 }
 ```
 
-Node is included. Tool bindings and API documentation are generated automatically.
+You can distribute the executable on its own. ReplicoKit embeds Node and the JavaScript worker and unpacks them into the user's cache on the first JavaScript call.
 
 ## Connect it to Codex
 

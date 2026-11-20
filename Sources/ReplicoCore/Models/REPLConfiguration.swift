@@ -3,7 +3,15 @@ import Foundation
 /// Process configuration fixed when a session is created.
 public struct REPLConfiguration: Sendable {
     /// The pinned Node 26.13.1 executable used to launch workers.
-    public var nodeExecutable: URL
+    public var nodeExecutable: URL {
+        get {
+            node.url
+        }
+        set {
+            node = .external(newValue)
+        }
+    }
+    private(set) var node: NodeExecutable
     /// The worker working directory and base for local module resolution.
     public var workingDirectory: URL
     /// The worker process environment; application adapters interpret any host-specific entries.
@@ -22,14 +30,22 @@ public struct REPLConfiguration: Sendable {
         exposedEnvironment: [String: String] = [:],
         maximumOutputBytes: Int = 16 * 1_024 * 1_024
     ) {
-        self.nodeExecutable = nodeExecutable
+        self.init(
+            node: .external(nodeExecutable), workingDirectory: workingDirectory, environment: environment,
+            exposedEnvironment: exposedEnvironment, maximumOutputBytes: maximumOutputBytes
+        )
+    }
+
+    /// Creates a session configuration without installing the selected Node runtime.
+    package init(
+        node: NodeExecutable, workingDirectory: URL, environment: [String: String],
+        exposedEnvironment: [String: String], maximumOutputBytes: Int
+    ) {
+        self.node = node
         self.workingDirectory = workingDirectory
         self.environment = environment
         self.exposedEnvironment = exposedEnvironment
         self.maximumOutputBytes = maximumOutputBytes
     }
 
-    var workerDirectory: URL {
-        (Bundle.module.resourceURL ?? Bundle.module.bundleURL).appending(path: "NodeWorker.bundle")
-    }
 }

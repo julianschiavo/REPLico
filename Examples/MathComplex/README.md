@@ -9,7 +9,7 @@ swift run math-complex add 2 3
 # 5
 ```
 
-To use the calculator from an MCP client, point it at `math-complex` in the directory printed by `swift build --show-bin-path` and pass `--mcp`.
+To distribute the calculator, run `swift build -c release --product math-complex` and copy the `math-complex` executable from the directory printed by `swift build -c release --show-bin-path`. An MCP client can launch that copy with `--mcp`.
 
 ```json
 {

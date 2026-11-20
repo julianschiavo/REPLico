@@ -12,13 +12,15 @@ if [[ ${PWD##*/} != REPLico ]]; then
 fi
 swift_test=(swift test --multiroot-data-file "$package_root/Tests/Packages.xcworkspace"
     --scratch-path "$PWD/.build" --disable-automatic-resolution)
+test_host=(env)
 if [[ ${GITHUB_ACTIONS:-} == true ]]; then
     if [[ ${RUNNER_OS:-} == Linux ]]; then
         swift_test=(stdbuf -o0 -e0 "${swift_test[@]}")
         if [[ -n ${SWIFT_TEST_IMAGE:-} ]]; then
-            swift_test=(docker run --rm --init --user "$(id -u):$(id -g)"
+            test_host=(docker run --rm --init --user "$(id -u):$(id -g)"
                 --volume "$PWD:$PWD" --workdir "$PWD" --env HOME=/tmp
-                --env NSUnbufferedIO --env SWIFTNIO_STRICT "$SWIFT_TEST_IMAGE" "${swift_test[@]}")
+                --env NSUnbufferedIO --env SWIFTNIO_STRICT "$SWIFT_TEST_IMAGE")
+            swift_test=("${test_host[@]}" "${swift_test[@]}")
         fi
     fi
     NSUnbufferedIO=YES SWIFTNIO_STRICT=1 "${swift_test[@]}" 2>&1 |
@@ -26,5 +28,7 @@ if [[ ${GITHUB_ACTIONS:-} == true ]]; then
 else
     SWIFTNIO_STRICT=1 "${swift_test[@]}"
 fi
-exec .runtime/ReplicoRuntime.artifactbundle/bin/node \
+node=.runtime/ReplicoRuntime.artifactbundle/bin/node
+"${test_host[@]}" "$node" Tests/Examples/standalone.mjs .build/debug
+exec "$node" \
     --experimental-vm-modules --experimental-import-meta-resolve --test Tests/NodeWorker/*.test.mjs

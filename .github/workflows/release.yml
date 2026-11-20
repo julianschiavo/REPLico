@@ -114,6 +114,11 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.number }}
         run: |
+          # The Swift toolchain on the Ubuntu runner includes LLVM's cross-assembler and archiver.
+          swift_resources=$(swiftc -print-target-info | jq -er '.paths.runtimeResourcePath')
+          export PATH="${swift_resources%/lib/swift}/bin:$PATH"
+          clang --version
+          llvm-ar --version
           scripts/runtime.py release --repository "$GITHUB_REPOSITORY" --version "$VERSION" --output "$RUNNER_TEMP/release"
           cd "$RUNNER_TEMP/release"
           sha256sum --strict --check SHA256SUMS

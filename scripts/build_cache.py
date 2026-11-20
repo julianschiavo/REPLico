@@ -36,6 +36,6 @@ def restore_timestamps(root, paths):
 
 if __name__ == "__main__":
     files = subprocess.check_output([
-        "git", "ls-files", "-z", "--", "Package.swift", "Package.resolved", "Sources", "Tests", "Examples", "Plugins",
+        "git", "ls-files", "-z", "--", "Package.swift", "Package.resolved", "Sources", "Tests", "Examples",
     ])
     restore_timestamps(Path.cwd(), [os.fsdecode(name) for name in files.split(b"\0") if name])

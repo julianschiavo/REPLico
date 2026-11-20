@@ -28,12 +28,6 @@ let package = Package(
     ],
     targets: [
         runtimeTarget,
-        .plugin(
-            name: "ReplicoResources",
-            capability: .buildTool(),
-            dependencies: ["ReplicoRuntimeArtifact"],
-            exclude: ["StageResources.mjs"]
-        ),
         .target(
             name: "ReplicoCore",
             dependencies: [
@@ -41,7 +35,7 @@ let package = Package(
                 .product(name: "NIOCore", package: "swift-nio"), .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "SystemPackage", package: "swift-system"),
             ],
-            resources: [.copy("Resources/NodeWorker.bundle")]
+            resources: [.embedInCode("Resources/NodeWorker.bundle")]
         ),
         .target(
             name: "ReplicoMCP",
@@ -72,12 +66,19 @@ let package = Package(
             ]
         ),
         .target(name: "ReplicoKit", dependencies: ["ReplicoCore", "ReplicoMCP", "ReplicoKitMacros"]),
-        .target(name: "ReplicoNode", plugins: ["ReplicoResources"]),
+        .target(
+            name: "ReplicoNode",
+            dependencies: [
+                "ReplicoKit", "ReplicoCore", "ReplicoRuntimeArtifact",
+                .product(name: "SystemPackage", package: "swift-system"),
+            ],
+            linkerSettings: [.linkedLibrary("z")]
+        ),
         .testTarget(name: "ReplicoCoreTests", dependencies: ["ReplicoCore"]),
         .testTarget(name: "ReplicoOptimizationsTests", dependencies: ["ReplicoOptimizations", "ReplicoCore"]),
         .testTarget(
             name: "ReplicoKitTests",
-            dependencies: ["ReplicoKit", .product(name: "MCP", package: "swift-sdk")]
+            dependencies: ["ReplicoKit", "ReplicoCore", "ReplicoNode", .product(name: "MCP", package: "swift-sdk")]
         ),
         .testTarget(
             name: "ReplicoKitMacrosTests",

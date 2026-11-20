@@ -35,47 +35,12 @@ public struct ApplicationConfiguration: Sendable {
     }
 
     func makeEngineConfiguration() throws -> ReplicoCore.REPLConfiguration {
-        let executable: URL
-        switch nodeRuntime {
-        case .bundled:
-            executable = try bundledNodeExecutable()
-        case .external(let url):
-            executable = url
-        }
-        return ReplicoCore.REPLConfiguration(
-            nodeExecutable: executable,
+        try ReplicoCore.REPLConfiguration(
+            node: nodeRuntime.executable(),
             workingDirectory: workingDirectory,
             environment: environment,
             exposedEnvironment: exposedEnvironment,
             maximumOutputBytes: maximumOutputBytes
-        )
-    }
-
-    private func bundledNodeExecutable() throws -> URL {
-        let main = Bundle.main
-        let directories = [
-            main.resourceURL, main.bundleURL,
-            main.executableURL?.deletingLastPathComponent(), main.bundleURL.deletingLastPathComponent(),
-        ]
-        .compactMap { $0 }
-        for directory in directories {
-            for name in ["Replico_ReplicoNode.bundle", "Replico_ReplicoNode.resources"] {
-                guard let bundle = Bundle(url: directory.appending(path: name)),
-                    let resourceDirectory = bundle.resourceURL
-                else {
-                    continue
-                }
-                let executable = resourceDirectory.appending(path: "NodeRuntime.bundle/node")
-                guard (try? executable.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
-                    FileManager.default.isExecutableFile(atPath: executable.path)
-                else {
-                    continue
-                }
-                return executable
-            }
-        }
-        throw REPLError.invalidConfiguration(
-            "Bundled Node is unavailable. Link ReplicoKit, or select NodeRuntime.external with your executable URL."
         )
     }
 }

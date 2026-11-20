@@ -2,8 +2,10 @@
 """Prepare verified runtime assets locally without publishing or changing Package.swift."""
 
 import argparse
+import gzip
 import hashlib
 import json
+import os
 import platform
 import re
 import shutil
@@ -35,6 +37,8 @@ TARGETS = {
     },
 }
 BUNDLE_NAME = "ReplicoRuntime.artifactbundle"
+ARTIFACT = "ReplicoRuntimeArtifact"
+COMPILER_INPUTS = Path(__file__).with_name("runtime").resolve()
 
 
 def digest(path):
@@ -145,7 +149,51 @@ def verified_archive(runtime, target):
     return archive
 
 
-def make_bundle(destination, target, archive):
+def embed_node(bundle, target):
+    """Cross-assemble read-only data. The importing compiler builds the fd API against its own libc and zlib."""
+    node = bundle / "bin/node"
+    license = bundle / "bin/LICENSE"
+    include = bundle / "include"
+    include.mkdir()
+    triple = TARGETS[target]["triple"]
+    apple = target.startswith("darwin-")
+    with tempfile.TemporaryDirectory(dir=bundle.parent) as temporary:
+        work = Path(temporary)
+        shutil.copyfile(license, work / "LICENSE")
+        compressed = work / "node.gz"
+        with node.open("rb") as source, compressed.open("wb") as output:
+            with gzip.GzipFile(filename="", fileobj=output, mode="wb", mtime=0, compresslevel=6) as gz:
+                shutil.copyfileobj(source, gz)
+        (include / "NodeIdentity.h").write_text(
+            f'#define REPLICO_NODE_VERSION "{NODE_VERSION}"\n'
+            f'#define REPLICO_NODE_SHA256 "{digest(node)}"\n'
+            f'#define REPLICO_NODE_SIZE {node.stat().st_size}\n'
+            f'#define REPLICO_NODE_GZIP_SIZE {compressed.stat().st_size}\n'
+            f'#define REPLICO_NODE_LICENSE_SIZE {license.stat().st_size}\n'
+        )
+        subprocess.run(["clang", "-target", triple + ("26.0" if apple else ""), "-c",
+                        COMPILER_INPUTS / "NodePayload.S", "-o", "node.o"], cwd=work, check=True)
+        (work / "node.o").chmod(0o644)
+        library = bundle / f"lib{ARTIFACT}.a"
+        if archiver := shutil.which("llvm-ar"):
+            command = [archiver, "--format=" + ("darwin" if apple else "gnu"), "rcsD"]
+        elif target == host_target():
+            command = ["ar", "rcs"]
+        else:
+            raise RuntimeError("Cross-platform release packaging requires llvm-ar in PATH.")
+        subprocess.run([*command, library, "node.o"], cwd=work, check=True, env=dict(os.environ, ZERO_AR_DATE="1"))
+    shutil.copyfile(COMPILER_INPUTS / f"{ARTIFACT}.h", include / f"{ARTIFACT}.h")
+    (include / "module.modulemap").write_text(
+        f'module {ARTIFACT} {{\n    header "{ARTIFACT}.h"\n    link "z"\n    export *\n}}\n'
+    )
+    return {
+        "path": library.name,
+        "supportedTriples": [triple],
+        "staticLibraryMetadata": {"headerPaths": ["include"], "moduleMapPath": "include/module.modulemap"},
+    }
+
+
+def make_bundle(destination, target, archive, *, development=False):
     variant = destination / "bin"
     variant.mkdir(parents=True)
     root = f"node-v{NODE_VERSION}-{target}"
@@ -160,12 +208,12 @@ def make_bundle(destination, target, archive):
         "nodeArchiveSHA256": TARGETS[target]["checksum"],
         "licenses": "Node's LICENSE includes its third-party notices.",
     })
+    library = embed_node(destination, target)
+    if not development:
+        (variant / "node").unlink()
     write_json(destination / "info.json", {
         "schemaVersion": "1.0",
-        "artifacts": {"node": {
-            "type": "executable", "version": NODE_VERSION,
-            "variants": [{"path": "bin/node", "supportedTriples": [TARGETS[target]["triple"]]}],
-        }},
+        "artifacts": {ARTIFACT: {"type": "staticLibrary", "version": NODE_VERSION, "variants": [library]}},
     })
 
 
@@ -191,7 +239,7 @@ def prepare(repository):
     with tempfile.TemporaryDirectory(prefix="artifact-", dir=runtime) as temporary:
         staged = Path(temporary) / BUNDLE_NAME
         target = host_target()
-        make_bundle(staged, target, verified_archive(runtime, target))
+        make_bundle(staged, target, verified_archive(runtime, target), development=True)
         replace_bundle(staged, runtime / BUNDLE_NAME)
     print(f"Prepared local runtime artifact: {runtime / BUNDLE_NAME}")
 
@@ -204,8 +252,8 @@ def deterministic_zip(bundle, destination):
             relative = path.relative_to(bundle.parent).as_posix()
             metadata = zipfile.ZipInfo(relative, date_time=(1980, 1, 1, 0, 0, 0))
             metadata.create_system = 3
-            metadata.compress_type = zipfile.ZIP_DEFLATED
-            metadata.external_attr = path.stat().st_mode << 16
+            metadata.compress_type = zipfile.ZIP_STORED if path.suffix == ".a" else zipfile.ZIP_DEFLATED
+            metadata.external_attr = (0o100755 if path.stat().st_mode & 0o111 else 0o100644) << 16
             with path.open("rb") as source, archive.open(metadata, "w") as output:
                 shutil.copyfileobj(source, output)
 
