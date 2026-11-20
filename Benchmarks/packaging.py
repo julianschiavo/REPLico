@@ -6,7 +6,7 @@ Each warm launch reuses the files created by the preceding cold sample.
 """
 
 import argparse
-from contextlib import closing, contextmanager
+from contextlib import closing, contextmanager, nullcontext
 import os
 from pathlib import Path
 import platform
@@ -34,7 +34,7 @@ def profile(samples, name):
 
 
 def environment(home):
-    home.mkdir()
+    home.mkdir(exist_ok=True)
     return dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home), XDG_CACHE_HOME=str(home / ".cache"))
 
 
@@ -45,7 +45,7 @@ def multiply(client, value):
     return elapsed
 
 
-def measure(executable, directory, embedded, calls, timings, profiles):
+def measure(executable, directory, embedded, options, timings, profiles):
     def record(name, elapsed):
         timings.setdefault(name, []).append(elapsed)
 
@@ -57,6 +57,8 @@ def measure(executable, directory, embedded, calls, timings, profiles):
         record("cli", (time.perf_counter_ns() - start) / 1e6)
         if output.strip() != b"42":
             raise RuntimeError(f"Incorrect CLI result: {output!r}")
+    if options.cli_only:
+        return
     env = environment(directory / "metadata")
     with profile(profiles, "initialize_and_list"), closing(Client(command, env, directory)) as client:
         record("initialize", client.startup_ms)
@@ -87,7 +89,7 @@ def measure(executable, directory, embedded, calls, timings, profiles):
 
     with profile(profiles, "repeated_rpc_session"), closing(Client(command, env, directory)) as client:
         multiply(client, 0)
-        for value in range(1, calls + 1):
+        for value in range(1, options.calls + 1):
             record("math_mult", multiply(client, value))
 
 
@@ -97,20 +99,25 @@ def main():
     parser.add_argument("--after", type=Path, required=True)
     parser.add_argument("--rounds", type=int, default=24)
     parser.add_argument("--calls", type=int, default=32)
+    parser.add_argument("--cli-only", action="store_true", help="Measure CLI launches, including identical-binary controls.")
     parser.add_argument("--output", type=Path, required=True)
     options = parser.parse_args()
-    if options.rounds < 2 or options.rounds % 2 or options.calls < 1:
-        parser.error("Choose an even number of rounds and at least one RPC per session.")
+    cycle = 4 if options.cli_only else 2
+    if options.rounds < cycle or options.rounds % cycle or options.calls < 1:
+        parser.error(f"Choose a positive multiple of {cycle} rounds and at least one RPC per session.")
     report = {"host": platform.platform(), "rounds": options.rounds, "calls": options.calls, "servers": {}}
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
         executables = {}
-        for name, source in (("before", options.before), ("after", options.after)):
+        builds = [("before", options.before), ("after", options.after)]
+        if options.cli_only:
+            builds.extend([("before_control", options.before), ("after_control", options.after)])
+        for name, source in builds:
             directory = root / name
             directory.mkdir()
             executable = directory / "math-complex"
             shutil.copy2(source, executable)
-            if name == "before":
+            if name.startswith("before"):
                 for bundle in source.parent.glob("Replico_Replico*"):
                     if bundle.suffix in {".bundle", ".resources"}:
                         shutil.copytree(bundle, directory / bundle.name)
@@ -120,11 +127,18 @@ def main():
                 "installed_bytes": sum(path.stat().st_size for path in directory.rglob("*") if path.is_file()),
                 "timings": {}, "profiles": {},
             }
-        for index in range(options.rounds):
-            for name in (("before", "after") if index % 2 == 0 else ("after", "before")):
+        for index in range(-8 if options.cli_only else 0, options.rounds):
+            # Four-period Williams design balances each copy's position and preceding binary.
+            offsets = (0, 1, 3, 2) if options.cli_only else (0, 1)
+            for offset in offsets:
+                name = builds[(offset + index) % cycle][0]
                 server = report["servers"][name]
-                with tempfile.TemporaryDirectory(dir=root) as sample:
-                    measure(executables[name], Path(sample), name == "after", options.calls, server["timings"], server["profiles"])
+                location = nullcontext(root) if options.cli_only else tempfile.TemporaryDirectory(dir=root)
+                with location as sample:
+                    measure(executables[name], Path(sample), name == "after", options,
+                            server["timings"] if index >= 0 else {}, server["profiles"] if index >= 0 else {})
+        if options.cli_only and any((root / "cli").rglob("node")):
+            raise RuntimeError("Ordinary CLI calls unexpectedly installed Node.")
         for server in report["servers"].values():
             server["timings"] = {key: summarize(samples) for key, samples in server["timings"].items()}
     save(options.output, report)

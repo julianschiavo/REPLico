@@ -28,6 +28,7 @@ if [[ ${GITHUB_ACTIONS:-} == true ]]; then
 else
     SWIFTNIO_STRICT=1 "${swift_test[@]}"
 fi
-"${test_host[@]}" python3 -m Tests.Examples.standalone .build/debug
-exec .runtime/ReplicoRuntime.artifactbundle/bin/node \
+node=.runtime/ReplicoRuntime.artifactbundle/bin/node
+"${test_host[@]}" "$node" Tests/Examples/standalone.mjs .build/debug
+exec "$node" \
     --experimental-vm-modules --experimental-import-meta-resolve --test Tests/NodeWorker/*.test.mjs
