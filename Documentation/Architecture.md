@@ -16,6 +16,8 @@ Declare each Swift tool’s arguments with `@ToolArguments` and describe its pro
 
 The `ReplicoKit` product links a compressed copy of Node and its notices into the host executable. The JavaScript worker is embedded in `ReplicoCore`. REPLico installs these files in the user's private cache on demand and runs Node as a subprocess. Applications with their own entry point can call `try await serve()` when they enter MCP mode. [Example](../Examples/MathComplex)
 
+On Linux the executable uses the app's usual Swift runtime linkage. [Deploying Swift executables on Linux](https://docs.swift.org/latest/documentation/swiftlinux/building/)
+
 To supply your own Node executable, depend on `ReplicoKitExternalNode`, import `ReplicoKit` and return `ApplicationConfiguration(nodeRuntime: .external(executableURL))` from the application.
 
 ## Running JavaScript directly

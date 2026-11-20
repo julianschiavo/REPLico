@@ -83,7 +83,7 @@ struct TextApplication: ReplicoApplication {
 }
 ```
 
-You can distribute the executable on its own. ReplicoKit embeds Node and the JavaScript worker and unpacks them into the user's cache when the app first serves MCP.
+You can distribute the executable on its own. ReplicoKit embeds Node and the JavaScript worker and unpacks them into the user's cache on the first JavaScript call.
 
 ## Connect it to Codex
 

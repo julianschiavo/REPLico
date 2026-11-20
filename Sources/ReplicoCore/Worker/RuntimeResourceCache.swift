@@ -24,7 +24,15 @@ package struct RuntimeResourceCache: Sendable {
 
     /// Computes an entry's destination without inspecting or creating cache files.
     package static func directory(for key: String) -> URL {
-        URL.cachesDirectory.appending(component: "REPLico", directoryHint: .isDirectory)
+        #if os(Linux)
+        let files = FileManager.default
+        let base =
+            files.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? files.homeDirectoryForCurrentUser.appending(component: ".cache", directoryHint: .isDirectory)
+        #else
+        let base = URL.cachesDirectory
+        #endif
+        return base.appending(component: "REPLico", directoryHint: .isDirectory)
             .appending(component: key, directoryHint: .isDirectory)
     }
 

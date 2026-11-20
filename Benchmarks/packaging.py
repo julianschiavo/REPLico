@@ -28,6 +28,7 @@ def profile(samples, name):
     samples.setdefault(name, []).append({
         "user_ms": 1000 * (after.ru_utime - before.ru_utime),
         "system_ms": 1000 * (after.ru_stime - before.ru_stime),
+        "minor_faults": after.ru_minflt - before.ru_minflt,
         "output_blocks": after.ru_oublock - before.ru_oublock,
     })
 
@@ -114,7 +115,11 @@ def main():
                     if bundle.suffix in {".bundle", ".resources"}:
                         shutil.copytree(bundle, directory / bundle.name)
             executables[name] = executable
-            report["servers"][name] = dict(build_manifest(executable), executable=str(source.resolve()), timings={}, profiles={})
+            report["servers"][name] = {
+                **build_manifest(executable), "executable": str(source.resolve()),
+                "installed_bytes": sum(path.stat().st_size for path in directory.rglob("*") if path.is_file()),
+                "timings": {}, "profiles": {},
+            }
         for index in range(options.rounds):
             for name in (("before", "after") if index % 2 == 0 else ("after", "before")):
                 server = report["servers"][name]
