@@ -17,7 +17,9 @@ The ruleset requires a pull request, the release label check, Swift formatting, 
 
 ## After a merge
 
-The release workflow runs formatting and tests on the merged commit. It builds three runtime archives, tags a child commit containing the versioned SwiftPM manifest, and publishes the GitHub release after verifying each uploaded asset. The source manifest on `main` points to the local development runtime. A tagged package downloads its verified runtime through SwiftPM.
+Each push to `main` starts a release. The workflow finds the pull request that merged at the pushed commit and uses its release label at the moment of merge. A push without a matching pull request fails the release check.
+
+After formatting and tests pass on that commit, the workflow builds three runtime archives, tags a child commit containing the versioned SwiftPM manifest, and publishes the GitHub release after verifying each uploaded asset. The source manifest on `main` points to the local development runtime. A tagged package downloads its verified runtime through SwiftPM.
 
 If publication stops partway through, rerun the failed workflow. It reuses the tag for that merge, checks existing asset digests and uploads missing assets to the draft. Conflicting bytes fail the run.
 

@@ -4,16 +4,15 @@ on:
   pull_request:
     branches: [main]
     types: [opened, reopened, synchronize, edited, labeled, unlabeled]
-  pull_request_target:
+  push:
     branches: [main]
-    types: [closed]
 
 permissions: {}
 
 # Label checks run independently per PR. Merged PRs reserve the release lane
 # before choosing a tag, so concurrent version bumps cannot overwrite each other.
 concurrency:
-  group: release-${{ github.event_name == 'pull_request_target' && github.event.pull_request.merged && 'main' || github.event.pull_request.number }}
+  group: release-${{ github.event.pull_request.number || 'main' }}
   queue: max
 
 defaults:
@@ -26,26 +25,35 @@ env:
 jobs:
   clean-pr-cache:
     name: Remove closed PR caches
-    if: github.event_name == 'pull_request_target' && github.event.action == 'closed'
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     permissions:
       actions: write
+      pull-requests: read
     steps:
-      - name: Delete caches scoped to this pull request
+      - name: Delete caches belonging to closed pull requests
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: gh cache delete --all --ref "refs/pull/$PR_NUMBER/merge" --repo "$GITHUB_REPOSITORY" --succeed-on-no-caches
+        run: |
+          repo="$GITHUB_REPOSITORY"
+          gh api --paginate "repos/$repo/actions/caches?per_page=100" \
+            --jq '.actions_caches[].ref | capture("^refs/pull/(?<pr>[0-9]+)/merge$").pr' | sort -u > "$RUNNER_TEMP/cached-prs"
+          while read -r pr; do
+            state=$(gh api "repos/$repo/pulls/$pr" --jq .state)
+            if [[ "$state" == closed ]]; then
+              gh cache delete --all --ref "refs/pull/$pr/merge" --repo "$repo" --succeed-on-no-caches
+            fi
+          done < "$RUNNER_TEMP/cached-prs"
 
   label:
     name: Release label
-    if: github.event_name == 'pull_request' || github.event.pull_request.merged
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       pull-requests: read
     outputs:
       bump: ${{ steps.label.outputs.bump }}
+      pr: ${{ steps.label.outputs.pr }}
     steps:
       - id: label
         name: Require one release label
@@ -53,38 +61,45 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
-            gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" > "$RUNNER_TEMP/pr.json"
+          repo="repos/$GITHUB_REPOSITORY"
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            PR_NUMBER=$(gh api --paginate --slurp "$repo/commits/$GITHUB_SHA/pulls?per_page=100" | jq -er '
+              add | map(select(.merged_at and .merge_commit_sha == env.GITHUB_SHA
+                and .base.repo.full_name == env.GITHUB_REPOSITORY and .base.ref == env.GITHUB_REF_NAME))
+              | if length == 1 then first.number else error("Expected one merged PR for " + env.GITHUB_SHA) end')
+            # A queued release or rerun must use the labels in effect at the merge.
+            gh api --paginate --slurp "$repo/issues/$PR_NUMBER/events?per_page=100" | jq -e '
+              add | (map(.event == "merged" and .commit_id == env.GITHUB_SHA) | index(true)
+                // error("Missing merge event for " + env.GITHUB_SHA)) as $merge
+              | reduce .[:$merge][] as $event ([];
+                  if $event.event == "labeled" then . + [$event.label.name]
+                  elif $event.event == "unlabeled" then . - [$event.label.name]
+                  else . end) | unique' > "$RUNNER_TEMP/labels.json"
           else
-            jq '.pull_request' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr.json"
+            gh api "$repo/pulls/$PR_NUMBER" | jq '[.labels[].name]' > "$RUNNER_TEMP/labels.json"
           fi
           bump=$(jq -er '
-            [.labels[].name | select(. == "release:major" or . == "release:minor" or . == "release:patch")]
+            map(select(. == "release:major" or . == "release:minor" or . == "release:patch"))
             | if length == 1 then .[0] | ltrimstr("release:")
               else error("Choose exactly one of release:major, release:minor or release:patch.") end
-          ' "$RUNNER_TEMP/pr.json")
+          ' "$RUNNER_TEMP/labels.json")
           echo "bump=$bump" >> "$GITHUB_OUTPUT"
+          echo "pr=$PR_NUMBER" >> "$GITHUB_OUTPUT"
 
   format:
-    if: github.event_name == 'pull_request_target' && github.event.pull_request.merged
+    if: github.event_name == 'push'
     uses: ./.github/workflows/format.yml
     permissions:
       contents: read
-    with:
-      revision: ${{ github.event.pull_request.merge_commit_sha }}
 
   test:
-    cache-mode: write
-    if: github.event_name == 'pull_request_target' && github.event.pull_request.merged
+    if: github.event_name == 'push'
     uses: ./.github/workflows/test.yml
     permissions:
       contents: read
-    with:
-      revision: ${{ github.event.pull_request.merge_commit_sha }}
 
   package:
-    if: github.event_name == 'pull_request_target' && github.event.pull_request.merged
-    cache-mode: write
+    if: github.event_name == 'push'
     needs: [label, format, test]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -96,7 +111,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Select release version
@@ -104,7 +119,7 @@ jobs:
         env:
           BUMP: ${{ needs.label.outputs.bump }}
         run: |
-          version=$(scripts/runtime.py next-version --merge "$(git rev-parse HEAD)" --bump "$BUMP")
+          version=$(scripts/runtime.py next-version --merge "$GITHUB_SHA" --bump "$BUMP")
           echo "number=$version" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -132,18 +147,17 @@ jobs:
           retention-days: 7
 
   publish:
-    needs: package
+    needs: [label, package]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write
     env:
       TAG: v${{ needs.package.outputs.version }}
-      MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -157,8 +171,8 @@ jobs:
         run: |
           (cd "$RUNNER_TEMP/release" && sha256sum --strict --check SHA256SUMS)
           if git show-ref --verify --quiet "refs/tags/$TAG"; then
-            test "$(git show -s --format=%P "$TAG^{commit}")" = "$MERGE_SHA"
-            test "$(git diff --name-only "$MERGE_SHA" "$TAG")" = Package.swift
+            test "$(git show -s --format=%P "$TAG^{commit}")" = "$GITHUB_SHA"
+            test "$(git diff --name-only "$GITHUB_SHA" "$TAG")" = Package.swift
             git show "$TAG:Package.swift" | cmp - "$RUNNER_TEMP/release/Package.swift"
           else
             cp "$RUNNER_TEMP/release/Package.swift" Package.swift
@@ -171,7 +185,7 @@ jobs:
       - name: Verify assets and publish
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ needs.label.outputs.pr }}
         run: |
           cd "$RUNNER_TEMP/release"
           repo="$GITHUB_REPOSITORY"
