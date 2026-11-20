@@ -5,7 +5,8 @@ import PackageDescription
 // BEGIN RUNTIME ARTIFACT
 let runtimeTarget: Target = .binaryTarget(
     name: "ReplicoRuntimeArtifact",
-    path: ".runtime/ReplicoRuntime.artifactbundle"
+    url: "https://github.com/julianschiavo/REPLico/releases/download/v0.2.1/ReplicoRuntime-0.2.1.artifactbundleindex",
+    checksum: "b326addaf4a8806f721e4804a8ad77ed5c9f508f0e79e186eb62e20512fec35f"
 )
 // END RUNTIME ARTIFACT
 
