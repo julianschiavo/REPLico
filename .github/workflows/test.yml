@@ -60,7 +60,7 @@ jobs:
       - name: Identify SwiftSyntax and project build caches
         id: build
         env:
-          CONFIGURATION: ${{ hashFiles('Package.swift', 'Examples/*/Package.swift', 'Tests/Packages.xcworkspace/**', '.github/workflows/test.yml', 'scripts/build_cache.py', 'scripts/test.sh', 'scripts/runtime.py') }}
+          CONFIGURATION: ${{ hashFiles('Package.swift', 'Examples/*/Package.swift', 'Tests/Packages.xcworkspace/**', '.github/workflows/test.yml', 'scripts/build_cache.py', 'scripts/test.sh', 'scripts/runtime.py', 'scripts/runtime/**') }}
         run: |
           revision=$(jq -er '.pins[] | select(.identity == "swift-syntax") | .state.revision' Tests/Packages.xcworkspace/xcshareddata/swiftpm/Package.resolved)
           if [[ "$RUNNER_OS" == Linux ]]; then
@@ -75,7 +75,7 @@ jobs:
           syntax="swift-syntax-${{ matrix.runner }}-$platform-$revision-"
           echo "syntax=$syntax" >> "$GITHUB_OUTPUT"
           echo "prefix=$syntax$CONFIGURATION-$host_build" >> "$GITHUB_OUTPUT"
-          inputs=$(git ls-tree HEAD -- Sources Tests Examples Plugins | git hash-object --stdin)
+          inputs=$(git ls-tree HEAD -- Sources Tests Examples | git hash-object --stdin)
           echo "inputs=$inputs" >> "$GITHUB_OUTPUT"
 
       - name: Restore SwiftPM and Node caches

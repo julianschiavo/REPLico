@@ -269,7 +269,7 @@ public actor REPLSession {
                     return
                 }
                 var worker =
-                    try existing
+                    existing
                     ?? NodeWorker(configuration: configuration, policy: request.launchPolicy, session: self)
                 let phase: Phase
                 if existing == nil {

@@ -12,13 +12,7 @@ struct NodeWorker: Sendable {
     private let task: Task<Void, Never>
     private var sources = WorkerSourceTable()
 
-    init(configuration: REPLConfiguration, policy: LaunchPolicy, session: REPLSession) throws {
-        guard FileManager.default.isExecutableFile(atPath: configuration.nodeExecutable.path),
-            FileManager.default.fileExists(atPath: configuration.workerDirectory.appending(path: "worker.mjs").path)
-        else {
-            throw REPLError.invalidConfiguration("Node or packaged worker resources are missing.")
-        }
-        let launch = try policy.makeWorkerLaunch(configuration: configuration)
+    init(configuration: REPLConfiguration, policy: LaunchPolicy, session: REPLSession) {
         let generation = UUID()
         self.generation = generation
         self.policy = policy
@@ -27,6 +21,13 @@ struct NodeWorker: Sendable {
             var channel: (any Channel)?
             let failure: REPLError?
             do {
+                try Task.checkCancellation()
+                let launch = try policy.makeWorkerLaunch(configuration: configuration)
+                if case .external(let url) = configuration.node,
+                    !FileManager.default.isExecutableFile(atPath: url.path)
+                {
+                    throw REPLError.invalidConfiguration("Node executable is missing at \(url.path).")
+                }
                 let pipes = try await WorkerInput(on: eventLoop)
                 channel = pipes.channel
                 try Task.checkCancellation()

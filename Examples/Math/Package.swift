@@ -8,7 +8,7 @@ let package = Package(
         .executable(name: "math", targets: ["Math"])
     ],
     dependencies: [
-        .package(url: "https://github.com/julianschiavo/REPLico.git", from: "0.1.0")
+        .package(url: "https://github.com/julianschiavo/REPLico.git", from: "0.2.0")
     ],
     targets: [
         .executableTarget(

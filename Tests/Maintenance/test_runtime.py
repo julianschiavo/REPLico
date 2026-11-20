@@ -4,7 +4,10 @@
 import argparse
 import io
 import json
+import os
+import shutil
 import stat
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -86,43 +89,87 @@ class RuntimeArtifactTests(unittest.TestCase):
             self.assertEqual(archive.read_bytes(), b"corrupt cache")
 
     def test_release_uses_verified_reproducible_archives_and_a_versioned_manifest(self):
-        target = "darwin-arm64"
+        host = artifacts.host_target()
+        targets = artifacts.TARGETS if shutil.which("llvm-ar") else {host: artifacts.TARGETS[host]}
+        executable = b"executable" * 16_384
+        notices = b"notices"
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             manifest = Path(artifacts.__file__).resolve().parents[1] / "Package.swift"
             (root / "Package.swift").write_bytes(manifest.read_bytes())
             downloads = root / ".runtime/downloads"
             downloads.mkdir(parents=True)
-            prefix = f"node-v{artifacts.NODE_VERSION}-{target}"
-            archive = downloads / (prefix + ".tar.gz")
-            with tarfile.open(archive, "w:gz") as source:
-                for name, contents in [("bin/node", b"executable"), ("LICENSE", b"notices")]:
-                    member = tarfile.TarInfo(f"{prefix}/{name}")
-                    member.size = len(contents)
-                    source.addfile(member, io.BytesIO(contents))
-            spec = dict(artifacts.TARGETS[target], checksum=artifacts.digest(archive))
-            with patch.object(artifacts, "TARGETS", {target: spec}):
+            specifications = {}
+            for target, spec in targets.items():
+                prefix = f"node-v{artifacts.NODE_VERSION}-{target}"
+                archive = downloads / f"{prefix}.{spec['extension']}"
+                with tarfile.open(archive, "w:" + spec["extension"].split(".")[-1]) as source:
+                    for name, contents in [("bin/node", executable), ("LICENSE", notices)]:
+                        member = tarfile.TarInfo(f"{prefix}/{name}")
+                        member.size = len(contents)
+                        source.addfile(member, io.BytesIO(contents))
+                specifications[target] = dict(spec, checksum=artifacts.digest(archive))
+
+            with patch.object(artifacts, "TARGETS", specifications):
+                artifacts.prepare(root)
                 artifacts.release(root, "example/replico", "1.2.3", root / "publish")
-                artifacts.release(root, None, "1.2.3", root / "local")
+                previous_mask = os.umask(0o077)
+                try:
+                    artifacts.release(root, None, "1.2.3", root / "local")
+                finally:
+                    os.umask(previous_mask)
+            node = root / ".runtime" / artifacts.BUNDLE_NAME / "bin/node"
+            self.assertEqual(node.read_bytes(), executable)
+            self.assertEqual(stat.S_IMODE(node.stat().st_mode), 0o755)
             index = next((root / "publish").glob("*.artifactbundleindex"))
-            variant, = json.loads(index.read_bytes())["archives"]
-            zipped = index.parent / variant["fileName"]
-            self.assertEqual(variant["checksum"], artifacts.digest(zipped))
-            self.assertEqual(zipped.read_bytes(), (root / "local" / zipped.name).read_bytes())
-            with zipfile.ZipFile(zipped) as packed:
-                bundle = artifacts.BUNDLE_NAME
-                node = f"{bundle}/bin/node"
-                self.assertEqual(packed.read(node), b"executable")
-                self.assertEqual(stat.S_IMODE(packed.getinfo(node).external_attr >> 16), 0o755)
-                self.assertEqual(packed.read(f"{bundle}/bin/LICENSE"), b"notices")
-                info = json.loads(packed.read(f"{bundle}/info.json"))
-                self.assertEqual(info["artifacts"]["node"]["variants"], [{"path": "bin/node", "supportedTriples": [spec["triple"]]}])
+            entries = json.loads(index.read_bytes())["archives"]
+            self.assertEqual(len(entries), len(targets))
+            for target, entry in zip(targets, entries):
+                zipped = index.parent / entry["fileName"]
+                self.assertEqual(entry["checksum"], artifacts.digest(zipped))
+                self.assertIn(artifacts.digest(zipped), (index.parent / "SHA256SUMS").read_text())
+                self.assertEqual(zipped.read_bytes(), (root / "local" / zipped.name).read_bytes())
+                with zipfile.ZipFile(zipped) as packed:
+                    packed.extractall(root / target)
+                bundle = root / target / artifacts.BUNDLE_NAME
+                self.assertFalse((bundle / "bin/node").exists())
+                self.assertEqual((bundle / "bin/LICENSE").read_bytes(), notices)
+                artifact = json.loads((bundle / "info.json").read_bytes())["artifacts"][artifacts.ARTIFACT]
+                self.assertEqual(artifact["type"], "staticLibrary")
+                variant, = artifact["variants"]
+                self.assertEqual(variant["supportedTriples"], [targets[target]["triple"]])
+                self.assertEqual(entry["supportedTriples"], variant["supportedTriples"])
+                library = bundle / variant["path"]
+                payload = subprocess.check_output([shutil.which("llvm-ar") or "ar", "p", library, "node.o"])
+                if target == "darwin-arm64":
+                    self.assertEqual(payload[:8], bytes.fromhex("cf fa ed fe 0c 00 00 01"))  # 64-bit ARM Mach-O
+                else:
+                    self.assertEqual(payload[:5], b"\x7fELF\x02")
+                    self.assertEqual(int.from_bytes(payload[18:20], "little"), 183 if target == "linux-arm64" else 62)
+                if target == host:
+                    self.check_linked_runtime(root, bundle, variant, executable, notices)
             staged = (index.parent / "Package.swift").read_text()
             self.assertIn(f"/releases/download/v1.2.3/{index.name}", staged)
             self.assertIn(artifacts.digest(index), staged)
-            self.assertIn(artifacts.digest(zipped), (index.parent / "SHA256SUMS").read_text())
             self.assertFalse((root / "local/Package.swift").exists())
             self.assertEqual((root / "Package.swift").read_bytes(), manifest.read_bytes())
+
+    def check_linked_runtime(self, root, bundle, variant, executable, notices):
+        source = root / "consumer.c"
+        source.write_text("""#include "ReplicoRuntimeArtifact.h"
+int main(void) {
+    if (replico_write_node_executable(-1) != EBADF) {
+        return 1;
+    }
+    return replico_write_node_executable(STDOUT_FILENO) || replico_write_node_license(STDERR_FILENO);
+}
+""")
+        headers, = variant["staticLibraryMetadata"]["headerPaths"]
+        consumer = root / "consumer"
+        subprocess.run(["clang", "-I", bundle / headers, source, bundle / variant["path"], "-lz", "-o", consumer], check=True)
+        result = subprocess.run([consumer], capture_output=True, check=True)
+        self.assertEqual(result.stdout, executable)
+        self.assertEqual(result.stderr, notices)
 
 
 if __name__ == "__main__":

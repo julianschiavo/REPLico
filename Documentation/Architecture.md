@@ -14,7 +14,9 @@ MCP clients see the host executable’s name and its bundle version when availab
 
 Declare each Swift tool’s arguments with `@ToolArguments` and describe its properties with `@Argument`. The macro supports strings, Booleans, integer and floating point types, arrays and optionals. Use `NoArguments` for an empty object or implement `ToolArgumentsProtocol` for a custom schema. A `ToolGroup` installs a JavaScript namespace each time a worker starts. [Complete application](../README.md#create-a-server)
 
-The `ReplicoKit` product includes Node. To supply your own Node executable, depend on `ReplicoKitExternalNode`, import `ReplicoKit` and return `ApplicationConfiguration(nodeRuntime: .external(executableURL))` from the application. Applications with their own entry point can call `try await serve()` when they enter MCP mode. [Example](../Examples/MathComplex)
+The `ReplicoKit` product links a compressed copy of Node and its notices into the host executable. The JavaScript worker is embedded in `ReplicoCore`. REPLico installs these files in the user's private cache on demand and runs Node as a subprocess. Applications with their own entry point can call `try await serve()` when they enter MCP mode. [Example](../Examples/MathComplex)
+
+To supply your own Node executable, depend on `ReplicoKitExternalNode`, import `ReplicoKit` and return `ApplicationConfiguration(nodeRuntime: .external(executableURL))` from the application.
 
 ## Running JavaScript directly
 

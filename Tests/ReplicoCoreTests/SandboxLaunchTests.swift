@@ -17,7 +17,9 @@ struct SandboxLaunchTests {
             Array(command.arguments.dropFirst(4).prefix(2)) == [
                 "--experimental-vm-modules", "--experimental-import-meta-resolve",
             ])
-        #expect(command.arguments.last == configuration.workerDirectory.appending(path: "worker.mjs").path)
+        let script = try #require(command.arguments.last)
+        #expect(URL(filePath: script).lastPathComponent == "worker.mjs")
+        #expect(FileManager.default.isReadableFile(atPath: script))
     }
 
     @Test

@@ -11,20 +11,22 @@ public enum LaunchPolicy: Sendable, Equatable {
     case unavailable(REPLError)
 
     func makeWorkerLaunch(configuration: REPLConfiguration) throws -> WorkerLaunch {
-        let arguments = [
-            "--experimental-vm-modules", "--experimental-import-meta-resolve",
-            configuration.workerDirectory.appending(path: "worker.mjs").path,
-        ]
+        let executable: URL
+        var arguments: [String]
         switch self {
         case .direct:
-            return WorkerLaunch(executable: configuration.nodeExecutable, arguments: arguments)
+            executable = try configuration.node.installedURL()
+            arguments = []
         case .sandboxed(let launcher):
-            return WorkerLaunch(
-                executable: launcher.executable,
-                arguments: launcher.arguments + [configuration.nodeExecutable.path] + arguments
-            )
+            executable = launcher.executable
+            arguments = launcher.arguments + [try configuration.node.installedURL().path]
         case .unavailable(let error):
             throw error
         }
+        arguments += [
+            "--experimental-vm-modules", "--experimental-import-meta-resolve",
+            try EmbeddedWorker.current.entryPoint().path,
+        ]
+        return WorkerLaunch(executable: executable, arguments: arguments)
     }
 }
