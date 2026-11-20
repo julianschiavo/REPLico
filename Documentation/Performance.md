@@ -1,6 +1,6 @@
 # Performance
 
-Two macOS arm64 release builds on an Apple M5 Max ran the same examples with Node 26.13.1. The baseline ships Node and the worker beside the executable. The new build embeds both. Times are milliseconds, shown as median / p95.
+Two macOS 27.2 arm64 release builds on an Apple M5 Max ran the same examples with Node 26.13.1 on November 19, 2026. The baseline ships Node and the worker beside the executable. The new build embeds both. Times are milliseconds, shown as median / p95.
 
 ## CLI and MCP startup
 
@@ -14,9 +14,10 @@ The driver alternated 32 pairs of installations. Each pair used a fresh user cac
 | List tools | 0.196 / 0.246 | 0.194 / 0.234 |
 | Launch through first result, empty cache | 51.972 / 64.481 | 1,040.256 / 1,192.579 |
 | Launch through first result, populated cache | 52.334 / 55.205 | 52.501 / 63.261 |
+| Launch through first result, 192 pairs sharing a populated cache | 51.417 / 56.434 | 52.220 / 57.584 |
 | Swift tool round trip | 0.224 / 0.413 | 0.220 / 0.424 |
 
-The larger executable added a small, reproducible cost to a plain calculator command. The median Swift tool call held steady. A profile of six fresh installations found that starting the newly written Node executable accounted for most of the first call. Apps using the same Node build share that cache.
+The larger executable added a small, reproducible cost to launching the calculator and to starting a fresh MCP process with a populated cache. The median Swift tool call held steady. A profile of six fresh installations found that starting the newly written Node executable accounted for most of the first call. Apps using the same Node build share that cache.
 
 | Empty cache profile | Median (ms) |
 | --- | ---: |
